@@ -1,0 +1,58 @@
+# Локальное окружение разработки:
+#   docker compose up -d postgres redis          # БД и брокер
+#   docker compose --profile ad up -d samba-ad   # тестовый Active Directory
+#
+# Samba AD DC даёт настоящую схему AD (sAMAccountName, objectGUID, memberOf,
+# paged search), поэтому код синхронизации пишется сразу боевой.
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: contacts-postgres
+    environment:
+      POSTGRES_DB: contacts
+      POSTGRES_USER: contacts
+      POSTGRES_PASSWORD: contacts
+    ports:
+      - "5433:5432"
+    volumes:
+      - contacts-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U contacts -d contacts"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: contacts-redis
+    ports:
+      - "6379:6379"
+
+  # Тестовый доменный контроллер. Поднимается отдельным профилем, чтобы не
+  # мешать обычной разработке: docker compose --profile ad up -d samba-ad
+  samba-ad:
+    image: diegogslomp/samba-ad-dc:latest
+    container_name: contacts-samba-ad
+    profiles: ["ad"]
+    hostname: dc1
+    privileged: true
+    environment:
+      REALM: CORP.LOCAL
+      DOMAIN: CORP
+      ADMIN_PASS: Passw0rd!2026
+      DNS_FORWARDER: 8.8.8.8
+      # Иначе samba слушает только lo внутри контейнера и снаружи не доступна.
+      BIND_NETWORK_INTERFACES: "false"
+    ports:
+      - "1389:389"    # LDAP
+      - "1636:636"    # LDAPS (самоподписанный сертификат Samba)
+    volumes:
+      # В этой сборке Samba каталог живёт в /usr/local/samba (не /var/lib/samba).
+      - contacts-samba-private:/usr/local/samba/private
+      - contacts-samba-etc:/usr/local/samba/etc
+
+volumes:
+  contacts-pgdata:
+  contacts-samba-private:
+  contacts-samba-etc:
