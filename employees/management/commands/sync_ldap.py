@@ -2,6 +2,8 @@ from django.core.management.base import BaseCommand, CommandError
 from django.utils.dateparse import parse_datetime
 
 from employees.models import SyncRun
+from employees.repositories import LdapServerRepository
+from employees.services import LdapSyncService
 
 
 class Command(BaseCommand):
@@ -11,12 +13,15 @@ class Command(BaseCommand):
         mode = parser.add_mutually_exclusive_group()
         mode.add_argument("--full", action="store_true", help="Полный обход (по умолчанию)")
         mode.add_argument("--incremental", action="store_true", help="Только изменённые с прошлого запуска")
+        parser.add_argument("--company", help="Код организации из справочника")
+        parser.add_argument("--server", dest="server_name", help="Название LDAP-подключения из админки")
+        parser.add_argument("--all", action="store_true", help="Все активные подключения")
         parser.add_argument("--changed-since", help="ISO-дата для инкрементальной выборки")
         parser.add_argument("--limit", type=int, help="Ограничить число записей (отладка)")
         parser.add_argument("--dry-run", action="store_true", help="Ничего не писать в БД")
         parser.add_argument("--demo", action="store_true", help="Тянуть с публичного ldap.forumsys.com")
         parser.add_argument("--profile", choices=["ad", "openldap"])
-        parser.add_argument("--server", dest="server_uri")
+        parser.add_argument("--server-uri", dest="server_uri")
         parser.add_argument("--bind-dn", dest="bind_dn")
         parser.add_argument("--password", dest="bind_password")
         parser.add_argument("--base-dn", dest="base_dn")
@@ -26,7 +31,6 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         from employees.management.commands.ldap_test import DEMO
-        from ldapsync.sync import run_sync
 
         overrides = dict(DEMO) if options["demo"] else {}
         for cli_name, key in {
@@ -49,17 +53,49 @@ class Command(BaseCommand):
                 raise CommandError("--changed-since ожидает ISO-дату, например 2026-08-01T00:00:00")
 
         mode = SyncRun.Mode.INCREMENTAL if options["incremental"] else SyncRun.Mode.FULL
+        service = LdapSyncService()
+        servers = LdapServerRepository()
+        targets = [None]
 
-        run = run_sync(
-            mode=mode,
-            changed_since=changed_since,
-            limit=options["limit"],
-            dry_run=options["dry_run"],
-            overrides=overrides,
-            progress=lambda message: self.stdout.write(f"  {message}"),
-        )
+        if options["server_name"]:
+            server = servers.get_by_name(options["server_name"])
+            if server is None:
+                raise CommandError(f"LDAP-подключение '{options['server_name']}' не найдено")
+            targets = [server]
+        elif options["company"]:
+            targets = list(servers.for_company(options["company"]))
+            if not targets:
+                raise CommandError(f"У организации '{options['company']}' нет активных LDAP-подключений")
+        elif options["all"]:
+            targets = list(servers.enabled())
+            if not targets:
+                raise CommandError("Нет активных LDAP-подключений, выполните load_companies")
 
-        self.stdout.write(self.style.MIGRATE_HEADING(f"\nСинхронизация #{run.id} ({run.get_mode_display()})"))
+        failed = []
+        for server in targets:
+            run = service.run(
+                mode=mode,
+                ldap_server=server,
+                changed_since=changed_since,
+                limit=options["limit"],
+                dry_run=options["dry_run"],
+                overrides=overrides,
+                trigger=SyncRun.Trigger.CLI,
+                progress=lambda message: self.stdout.write(f"  {message}"),
+            )
+            self.report(run, server)
+            if run.status != SyncRun.Status.SUCCESS:
+                failed.append(run)
+
+        if failed:
+            raise CommandError("; ".join(run.error or "ошибка синхронизации" for run in failed))
+        self.stdout.write(self.style.SUCCESS("Готово"))
+
+    def report(self, run, server):
+        title = f"\nСинхронизация #{run.id} ({run.get_mode_display()})"
+        if server is not None:
+            title += f" - {server.name} / {server.company.name}"
+        self.stdout.write(self.style.MIGRATE_HEADING(title))
         self.stdout.write(f"  прочитано:      {run.entries_read}")
         self.stdout.write(f"  создано:        {run.created}")
         self.stdout.write(f"  обновлено:      {run.updated}")
@@ -68,7 +104,5 @@ class Command(BaseCommand):
         if run.dry_run:
             self.stdout.write(f"  пропущено (dry-run): {run.skipped}")
         self.stdout.write(f"  длительность:   {run.duration_seconds} с")
-
         if run.status != SyncRun.Status.SUCCESS:
-            raise CommandError(run.error or "Синхронизация завершилась с ошибкой")
-        self.stdout.write(self.style.SUCCESS("Готово"))
+            self.stdout.write(self.style.ERROR(f"  ошибка: {run.error}"))

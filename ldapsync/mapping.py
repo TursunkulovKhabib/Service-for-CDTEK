@@ -23,7 +23,7 @@ MAX_LEN = {
     "internal_phone": 32,
     "department": 255,
     "title": 255,
-    "company": 255,
+    "company_name": 255,
     "office": 255,
     "city": 128,
     "employee_id": 64,

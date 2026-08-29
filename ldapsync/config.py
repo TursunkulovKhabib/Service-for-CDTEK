@@ -44,7 +44,7 @@ AD_PROFILE = LdapProfile(
         "internal_phone": "ipPhone",
         "department": "department",
         "title": "title",
-        "company": "company",
+        "company_name": "company",
         "office": "physicalDeliveryOfficeName",
         "city": "l",
         "employee_id": "employeeID",

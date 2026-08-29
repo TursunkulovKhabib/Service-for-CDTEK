@@ -1,33 +1,12 @@
-import os
-from pathlib import Path
-
-from dotenv import load_dotenv
-
-BASE_DIR = Path(__file__).resolve().parent.parent
-
-load_dotenv(BASE_DIR / ".env")
-
-
-def env(name: str, default: str = "") -> str:
-    return os.environ.get(name, default)
-
-
-def env_bool(name: str, default: bool = False) -> bool:
-    return env(name, str(default)).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def env_int(name: str, default: int) -> int:
-    raw = env(name, "").strip()
-    return int(raw) if raw else default
-
-
-def env_list(name: str, default: str = "", sep: str = ";") -> list:
-    raw = env(name, default)
-    return [item.strip() for item in raw.split(sep) if item.strip()]
-
+from .api import *  # noqa: F401,F403
+from .celery import *  # noqa: F401,F403
+from .companies import *  # noqa: F401,F403
+from .env import BASE_DIR, env, env_bool, env_int, env_list
+from .ldap import *  # noqa: F401,F403
+from .legacy import *  # noqa: F401,F403
 
 SECRET_KEY = env("DJANGO_SECRET_KEY", "django-insecure-dev-only-change-me")
-DEBUG = env_bool("DJANGO_DEBUG", True)
+DEBUG = env_bool("DJANGO_DEBUG", False)
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost;127.0.0.1;0.0.0.0")
 CSRF_TRUSTED_ORIGINS = env_list("DJANGO_CSRF_TRUSTED_ORIGINS", "")
 
@@ -42,8 +21,10 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "rest_framework_simplejwt",
     "django_filters",
     "django_celery_beat",
+    "django_celery_results",
     "employees",
 ]
 
@@ -110,54 +91,10 @@ LANGUAGE_CODE = env("DJANGO_LANGUAGE_CODE", "ru-ru")
 TIME_ZONE = env("DJANGO_TIME_ZONE", "Europe/Moscow")
 USE_I18N = True
 USE_TZ = True
+CELERY_TIMEZONE = TIME_ZONE
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
-
-LDAP = {
-    "PROFILE": env("LDAP_PROFILE", "ad"),
-    "SERVER_URI": env("LDAP_SERVER_URI", "ldaps://dc01.example.local"),
-    "PORT": env_int("LDAP_PORT", 0) or None,
-    "USE_SSL": env_bool("LDAP_USE_SSL", True),
-    "START_TLS": env_bool("LDAP_START_TLS", False),
-    "TLS_VALIDATE": env_bool("LDAP_TLS_VALIDATE", True),
-    "CA_CERTS_FILE": env("LDAP_CA_CERTS_FILE", "") or None,
-    "BIND_DN": env("LDAP_BIND_DN", ""),
-    "BIND_PASSWORD": env("LDAP_BIND_PASSWORD", ""),
-    "AUTHENTICATION": env("LDAP_AUTHENTICATION", "SIMPLE"),
-    "BASE_DN": env("LDAP_BASE_DN", "DC=example,DC=local"),
-    "SEARCH_OUS": env_list("LDAP_SEARCH_OUS", ""),
-    "USER_FILTER": env("LDAP_USER_FILTER", ""),
-    "INCLUDE_DISABLED": env_bool("LDAP_INCLUDE_DISABLED", False),
-    "PAGE_SIZE": env_int("LDAP_PAGE_SIZE", 500),
-    "TIMEOUT": env_int("LDAP_TIMEOUT", 30),
-    "RECEIVE_TIMEOUT": env_int("LDAP_RECEIVE_TIMEOUT", 60),
-    "DEACTIVATE_MISSING": env_bool("LDAP_DEACTIVATE_MISSING", True),
-    "MIN_ENTRIES_FOR_DEACTIVATION": env_int("LDAP_MIN_ENTRIES_FOR_DEACTIVATION", 1),
-}
-
-REST_FRAMEWORK = {
-    "DEFAULT_FILTER_BACKENDS": [
-        "django_filters.rest_framework.DjangoFilterBackend",
-        "rest_framework.filters.SearchFilter",
-        "rest_framework.filters.OrderingFilter",
-    ],
-    "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.LimitOffsetPagination",
-    "PAGE_SIZE": env_int("API_PAGE_SIZE", 50),
-    "DEFAULT_PERMISSION_CLASSES": ["employees.permissions.HasAPIKeyOrIsAuthenticated"],
-    "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.SessionAuthentication"],
-}
-
-API_KEY = env("API_KEY", "")
-API_REQUIRE_KEY = env_bool("API_REQUIRE_KEY", not DEBUG)
-
-CELERY_BROKER_URL = env("CELERY_BROKER_URL", "redis://127.0.0.1:6379/0")
-CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", CELERY_BROKER_URL)
-CELERY_TIMEZONE = TIME_ZONE
-CELERY_TASK_TIME_LIMIT = env_int("CELERY_TASK_TIME_LIMIT", 60 * 30)
-CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
-LDAP_SYNC_INCREMENTAL_MINUTES = env_int("LDAP_SYNC_INCREMENTAL_MINUTES", 15)
-LDAP_SYNC_FULL_CRON = env("LDAP_SYNC_FULL_CRON", "20 3 * * *")
 
 UNFOLD = {
     "SITE_TITLE": "Контакты - справочник сотрудников",
@@ -165,20 +102,26 @@ UNFOLD = {
     "SITE_SUBHEADER": "Синхронизация с Active Directory",
     "SHOW_HISTORY": True,
     "SHOW_VIEW_ON_SITE": False,
-    "SIDEBAR": {
-        "show_search": True,
-        "show_all_applications": True,
-    },
+    "SIDEBAR": {"show_search": True, "show_all_applications": True},
 }
+
+SENSITIVE_FIELDS = ["bind_password", "password", "token", "secret", "api_key"]
 
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
+    "filters": {
+        "mask_secrets": {"()": "employees.logging_filters.MaskSecretsFilter"},
+    },
     "formatters": {
         "simple": {"format": "{asctime} {levelname} {name}: {message}", "style": "{"},
     },
     "handlers": {
-        "console": {"class": "logging.StreamHandler", "formatter": "simple"},
+        "console": {
+            "class": "logging.StreamHandler",
+            "formatter": "simple",
+            "filters": ["mask_secrets"],
+        },
     },
     "root": {"handlers": ["console"], "level": env("DJANGO_LOG_LEVEL", "INFO")},
     "loggers": {

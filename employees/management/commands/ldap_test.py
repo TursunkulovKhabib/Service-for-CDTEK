@@ -26,6 +26,8 @@ class Command(BaseCommand):
         parser.add_argument("--demo", action="store_true", help="Публичный ldap.forumsys.com")
         parser.add_argument("--profile", choices=["ad", "openldap"], help="Диалект каталога")
         parser.add_argument("--server", dest="server_uri", help="ldaps://dc01.corp.local")
+        parser.add_argument("--connection", dest="connection_name",
+                            help="Название LDAP-подключения из админки")
         parser.add_argument("--port", type=int)
         parser.add_argument("--bind-dn", dest="bind_dn")
         parser.add_argument("--password", dest="bind_password")
@@ -41,7 +43,14 @@ class Command(BaseCommand):
         parser.add_argument("--json", action="store_true", help="Вывод в JSON")
 
     def handle(self, *args, **options):
+        from employees.repositories import LdapServerRepository
+
         overrides = {}
+        if options.get("connection_name"):
+            server = LdapServerRepository().get_by_name(options["connection_name"])
+            if server is None:
+                raise CommandError(f"LDAP-подключение '{options['connection_name']}' не найдено")
+            overrides.update(server.as_overrides())
         if options["demo"]:
             overrides.update(DEMO)
 

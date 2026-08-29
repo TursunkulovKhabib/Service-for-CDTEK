@@ -1,24 +1,17 @@
-# Локальное окружение разработки:
-#   docker compose up -d postgres redis          # БД и брокер
-#   docker compose --profile ad up -d samba-ad   # тестовый Active Directory
-#
-# Samba AD DC даёт настоящую схему AD (sAMAccountName, objectGUID, memberOf,
-# paged search), поэтому код синхронизации пишется сразу боевой.
-
 services:
   postgres:
     image: postgres:17
     container_name: contacts-postgres
     environment:
-      POSTGRES_DB: contacts
-      POSTGRES_USER: contacts
-      POSTGRES_PASSWORD: contacts
+      POSTGRES_DB: ${POSTGRES_DB:-contacts}
+      POSTGRES_USER: ${POSTGRES_USER:-contacts}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-contacts}
     ports:
       - "5433:5432"
     volumes:
       - contacts-pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U contacts -d contacts"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-contacts} -d ${POSTGRES_DB:-contacts}"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -28,9 +21,65 @@ services:
     container_name: contacts-redis
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
-  # Тестовый доменный контроллер. Поднимается отдельным профилем, чтобы не
-  # мешать обычной разработке: docker compose --profile ad up -d samba-ad
+  app:
+    build: .
+    container_name: contacts-app
+    profiles: ["app"]
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      CELERY_BROKER_URL: redis://redis:6379/0
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py load_companies &&
+             gunicorn serviceforcdtek.wsgi:application --bind 0.0.0.0:8000 --workers 3"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    container_name: contacts-worker
+    profiles: ["app"]
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      CELERY_BROKER_URL: redis://redis:6379/0
+    command: celery -A serviceforcdtek worker -l info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  beat:
+    build: .
+    container_name: contacts-beat
+    profiles: ["app"]
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      CELERY_BROKER_URL: redis://redis:6379/0
+    command: celery -A serviceforcdtek beat -l info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   samba-ad:
     image: diegogslomp/samba-ad-dc:latest
     container_name: contacts-samba-ad
@@ -42,17 +91,36 @@ services:
       DOMAIN: CORP
       ADMIN_PASS: Passw0rd!2026
       DNS_FORWARDER: 8.8.8.8
-      # Иначе samba слушает только lo внутри контейнера и снаружи не доступна.
       BIND_NETWORK_INTERFACES: "false"
     ports:
-      - "1389:389"    # LDAP
-      - "1636:636"    # LDAPS (самоподписанный сертификат Samba)
+      - "1389:389"
+      - "1636:636"
     volumes:
-      # В этой сборке Samba каталог живёт в /usr/local/samba (не /var/lib/samba).
       - contacts-samba-private:/usr/local/samba/private
       - contacts-samba-etc:/usr/local/samba/etc
+
+  samba-ad-branch:
+    image: diegogslomp/samba-ad-dc:latest
+    container_name: contacts-samba-ad-branch
+    profiles: ["ad2"]
+    hostname: dc2
+    privileged: true
+    environment:
+      REALM: BRANCH.LOCAL
+      DOMAIN: BRANCH
+      ADMIN_PASS: Passw0rd!2026
+      DNS_FORWARDER: 8.8.8.8
+      BIND_NETWORK_INTERFACES: "false"
+    ports:
+      - "2389:389"
+      - "2636:636"
+    volumes:
+      - contacts-samba2-private:/usr/local/samba/private
+      - contacts-samba2-etc:/usr/local/samba/etc
 
 volumes:
   contacts-pgdata:
   contacts-samba-private:
   contacts-samba-etc:
+  contacts-samba2-private:
+  contacts-samba2-etc:

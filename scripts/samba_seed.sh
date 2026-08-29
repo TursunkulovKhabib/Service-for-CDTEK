@@ -1,17 +1,11 @@
 #!/bin/bash
-# Наполняет тестовый Samba AD DC оргструктурой и сотрудниками.
-# Запуск (после `docker compose --profile ad up -d samba-ad`):
-#
-#   docker cp scripts/samba_seed.sh contacts-samba-ad:/tmp/samba_seed.sh
-#   docker exec contacts-samba-ad bash /tmp/samba_seed.sh
-#
-# Скрипт идемпотентен: повторный запуск не падает на уже существующих объектах.
 set -u
 
-BASE_DN="DC=corp,DC=local"
+BASE_DN="${BASE_DN:-DC=corp,DC=local}"
+COMPANY_NAME="${COMPANY_NAME:-ЦЦ ТЭК}"
+SEED_SET="${SEED_SET:-main}"
 USERS_OU="OU=Users,OU=Company,${BASE_DN}"
 PASS='Passw0rd!2026'
-# Расположение базы каталога зависит от сборки Samba, поэтому ищем её.
 SAM_LDB="$(find /usr/local/samba /var/lib/samba -name sam.ldb 2>/dev/null | head -1)"
 
 create_ou() {
@@ -30,33 +24,43 @@ create_user() {
         --given-name="$given" \
         --job-title="$title" \
         --department="$dept" \
-        --company="ЦДТ" \
-        --mail-address="${login}@corp.local" \
+        --company="$COMPANY_NAME" \
+        --mail-address="${login}@$(echo "$BASE_DN" | sed 's/DC=//g; s/,/./g')" \
         --telephone-number="$phone" \
         --physical-delivery-office="Главный офис" \
         >/dev/null && echo "Создан: $login ($surname $given)"
+}
+
+user_dn() {
+    samba-tool user show "$1" 2>/dev/null | awk '/^dn: /{sub(/^dn: /, ""); print; exit}'
 }
 
 create_ou "OU=Company,${BASE_DN}"
 create_ou "${USERS_OU}"
 create_ou "OU=Service,${BASE_DN}"
 
-create_user ivanov    "Иванов"    "Иван"    "Ведущий инженер"      "Отдел разработки"    "+7 (495) 123-45-67"
-create_user petrova   "Петрова"   "Мария"   "Бухгалтер"            "Бухгалтерия"         "+7 (495) 123-45-68"
-create_user sidorov   "Сидоров"   "Сидор"   "Руководитель отдела"  "Отдел разработки"    "+7 (495) 123-45-69"
-create_user kuznetsov "Кузнецов"  "Алексей" "Системный администратор" "ИТ-инфраструктура" "+7 (495) 123-45-70"
-create_user orlova    "Орлова"    "Анна"    "HR-менеджер"          "Кадры"               "+7 (495) 123-45-71"
-create_user uvolen    "Уволенный" "Сотрудник" "Инженер"            "Отдел разработки"    "+7 (495) 123-45-72"
+if [ "$SEED_SET" = "engs" ]; then
+    BOSS_LOGIN=morozov
+    create_user morozov  "Морозов"  "Виктор" "Директор"            "Дирекция"  "+7 (843) 200-10-01"
+    create_user sokolov  "Соколов"  "Олег"   "Логист"            "Логистика" "+7 (843) 200-10-02"
+    create_user zaytseva "Зайцева"  "Ольга"  "Менеджер"          "Продажи"   "+7 (843) 200-10-03"
+    STAFF="sokolov zaytseva"
+    DISABLED=zaytseva
+else
+    BOSS_LOGIN=sidorov
+    create_user ivanov    "Иванов"    "Иван"      "Ведущий инженер"         "Отдел разработки"  "+7 (495) 123-45-67"
+    create_user petrova   "Петрова"   "Мария"     "Бухгалтер"               "Бухгалтерия"       "+7 (495) 123-45-68"
+    create_user sidorov   "Сидоров"   "Сидор"     "Руководитель отдела"     "Отдел разработки"  "+7 (495) 123-45-69"
+    create_user kuznetsov "Кузнецов"  "Алексей"   "Системный администратор" "ИТ-инфраструктура" "+7 (495) 123-45-70"
+    create_user orlova    "Орлова"    "Анна"      "HR-менеджер"             "Кадры"             "+7 (495) 123-45-71"
+    create_user uvolen    "Уволенный" "Сотрудник" "Инженер"                 "Отдел разработки"  "+7 (495) 123-45-72"
+    STAFF="ivanov petrova kuznetsov orlova uvolen"
+    DISABLED=uvolen
+fi
 
-# samba-tool строит CN из имени и фамилии, поэтому DN достаём из каталога.
-user_dn() {
-    samba-tool user show "$1" 2>/dev/null | awk '/^dn: /{sub(/^dn: /, ""); print; exit}'
-}
-
-# Руководитель, мобильный, внутренний номер и отчество - через LDIF.
-BOSS_DN="$(user_dn sidorov)"
+BOSS_DN="$(user_dn "$BOSS_LOGIN")"
 counter=0
-for login in ivanov petrova kuznetsov orlova uvolen; do
+for login in $STAFF; do
     dn="$(user_dn "$login")"
     [ -z "$dn" ] && continue
     counter=$((counter + 1))
@@ -68,10 +72,16 @@ for login in ivanov petrova kuznetsov orlova uvolen; do
     fi
 done
 
-# Одну учётку отключаем - она не должна попасть в справочник.
-samba-tool user disable uvolen >/dev/null 2>&1 && echo "Отключена учётка: uvolen"
+for login in $BOSS_LOGIN $STAFF; do
+    dn="$(user_dn "$login")"
+    [ -z "$dn" ] && continue
+    printf 'dn: %s\nchangetype: modify\nreplace: company\ncompany: %s\n' "$dn" "$COMPANY_NAME" \
+        | ldbmodify -H "$SAM_LDB" >/dev/null 2>&1 \
+        && echo "  организация проставлена: $login ($COMPANY_NAME)"
+done
 
-# Сервисная учётка с правом чтения каталога - под ней ходит микросервис.
+samba-tool user disable "$DISABLED" >/dev/null 2>&1 && echo "Отключена учётка: $DISABLED"
+
 if ! samba-tool user show svc-contacts >/dev/null 2>&1; then
     samba-tool user create svc-contacts "$PASS" --userou="OU=Service" \
         --description="Сервисная учётка микросервиса Контакты" >/dev/null \
@@ -79,5 +89,5 @@ if ! samba-tool user show svc-contacts >/dev/null 2>&1; then
 fi
 
 echo
-echo "Готово. Проверка:"
+echo "Готово. Домен ${BASE_DN}:"
 samba-tool user list

@@ -1,20 +1,20 @@
-import hmac
-
 from django.conf import settings
-from rest_framework.permissions import BasePermission
-
-API_KEY_HEADER = "HTTP_X_API_KEY"
+from rest_framework.permissions import BasePermission, IsAuthenticated
 
 
-class HasAPIKeyOrIsAuthenticated(BasePermission):
-
-    message = "Требуется корректный заголовок X-API-Key."
+class LegacyV1Permission(BasePermission):
+    message = "Требуется basic-авторизация."
 
     def has_permission(self, request, view) -> bool:
-        if not getattr(settings, "API_REQUIRE_KEY", False):
+        if not getattr(settings, "LEGACY_V1_REQUIRE_BASIC_AUTH", False):
             return True
-        if request.user and request.user.is_authenticated:
+        return bool(request.user and request.user.is_authenticated)
+
+
+class JwtRequiredPermission(IsAuthenticated):
+    message = "Требуется JWT-токен: заголовок Authorization: Bearer <token>."
+
+    def has_permission(self, request, view) -> bool:
+        if not getattr(settings, "API_V2_REQUIRE_JWT", True):
             return True
-        expected = getattr(settings, "API_KEY", "")
-        provided = request.META.get(API_KEY_HEADER, "")
-        return bool(expected) and hmac.compare_digest(provided, expected)
+        return super().has_permission(request, view)
