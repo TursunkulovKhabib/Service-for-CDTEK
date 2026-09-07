@@ -55,6 +55,13 @@ class MappingTests(TestCase):
             with self.subTest(raw=raw):
                 self.assertEqual(parse_birthday(raw, AD.birthday_formats), expected)
 
+    def test_one_chain_covers_both_companies(self):
+        """ЦЦ ТЭК хранит даты как MM.dd.yyyy, ЭНГС - как yyyy-MM-dd."""
+        expected = date(1990, 5, 17)
+        for raw in ("05.17.1990", "1990-05-17", "1990-05-17 00:00:00"):
+            with self.subTest(raw=raw):
+                self.assertEqual(parse_birthday(raw, AD.birthday_formats), expected)
+
     def test_ambiguous_date_follows_java_order_month_first(self):
         self.assertEqual(
             parse_birthday("12.05.1990", AD.birthday_formats), date(1990, 12, 5)
