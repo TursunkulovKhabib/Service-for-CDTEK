@@ -42,6 +42,32 @@ class Command(BaseCommand):
         parser.add_argument("--raw", action="store_true", help="Показать сырые атрибуты каталога")
         parser.add_argument("--json", action="store_true", help="Вывод в JSON")
 
+    def describe(self, payload: dict, entry: dict) -> str:
+        """Карточка сотрудника для глаз - поля берём мягко, чтобы вывод не падал."""
+
+        def value(name: str) -> str:
+            result = payload.get(name)
+            if isinstance(result, (bytes, bytearray)):
+                return f"<{len(result)} байт>"
+            return str(result) if result not in (None, "", False) else "—"
+
+        lines = [
+            f"  • {value('full_name')}",
+            f"      guid:    {value('object_guid')}",
+            f"      login:   {value('sam_account_name')}",
+            f"      почта:   {value('email')}",
+            f"      моб.:    {value('phone_mobile')}",
+            f"      раб.:    {value('phone_mobile_work')}",
+            f"      вн.:     {value('phone_internal')}",
+            f"      подр.:   {value('department')} / {value('title')}",
+            f"      регион:  {value('region')} / {value('office')}",
+            f"      д.р.:    {value('birthday')}   ПДн: {value('personal_data_consent')}",
+            f"      ЗУП:     {value('zup_uid')}   проект: {value('project_name')}",
+            f"      фото:    {value('photo')}",
+            f"      dn:      {entry['dn']}",
+        ]
+        return "\n".join(lines)
+
     def handle(self, *args, **options):
         from employees.management.commands.ldap_audit import resolve_connection
 
@@ -94,15 +120,7 @@ class Command(BaseCommand):
                     results.append({"raw": entry, "mapped": payload} if options["raw"] else payload)
                     if options["json"]:
                         continue
-                    self.stdout.write(
-                        f"  • {payload['full_name'] or payload['display_name'] or entry['dn']}\n"
-                        f"      guid:  {payload['object_guid']}\n"
-                        f"      login: {payload['sam_account_name'] or '—'}\n"
-                        f"      mail:  {payload['email'] or '—'}\n"
-                        f"      тел.:  {payload['phone'] or '—'}\n"
-                        f"      подр.: {payload['department'] or '—'} / {payload['title'] or '—'}\n"
-                        f"      dn:    {entry['dn']}"
-                    )
+                    self.stdout.write(self.describe(payload, entry))
                     if options["raw"]:
                         self.stdout.write(f"      raw:   {entry['attributes']}")
         except LdapSyncError as exc:
