@@ -48,7 +48,8 @@ class LdapServerAdmin(CeleryTriggerMixin, BaseModelAdmin):
                        "bind_password_env"),
         }),
         ("Поиск", {
-            "fields": ("base_dn", "search_ous", "user_filter", "include_disabled", "page_size"),
+            "fields": ("base_dn", "search_ous", "user_filter", "include_disabled",
+                       "page_size", "birthday_format"),
         }),
         ("Синхронизация", {
             "fields": ("timeout", "receive_timeout", "deactivate_missing",

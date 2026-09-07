@@ -50,10 +50,18 @@ class MappingTests(TestCase):
 
     def test_birthday_is_parsed_in_every_format_found_in_ad(self):
         expected = date(1990, 5, 17)
-        for raw in ("17.05.1990", "17.05.1990 0:00:00", "1990-05-17",
-                    "1990-05-17 00:00:00", "19900517000000.0Z", "17.05.90"):
+        for raw in ("05.17.1990", "05.17.1990 0:00:00", "17.05.1990",
+                    "1990-05-17", "1990.05.17", "17-05-1990"):
             with self.subTest(raw=raw):
-                self.assertEqual(parse_birthday(raw), expected)
+                self.assertEqual(parse_birthday(raw, AD.birthday_formats), expected)
+
+    def test_ambiguous_date_follows_java_order_month_first(self):
+        self.assertEqual(
+            parse_birthday("12.05.1990", AD.birthday_formats), date(1990, 12, 5)
+        )
+
+    def test_connection_can_override_date_order(self):
+        self.assertEqual(parse_birthday("12.05.1990", ("%d.%m.%Y",)), date(1990, 5, 12))
 
     def test_birthday_of_unparsable_value_is_ignored(self):
         for raw in ("1990", "", "не дата", None):

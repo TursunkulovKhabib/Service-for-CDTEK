@@ -9,6 +9,9 @@ AD_ENABLED_ONLY = "(!(userAccountControl:1.2.840.113556.1.4.803:=2))"
 
 TRANSFER_POSITION_TEXT = "Перевод сотрудника. Данные обновляются..."
 
+# В Java: SimpleDateFormat("MM.dd.yyyy") - сначала месяц, потом день.
+AD_BIRTHDAY_FORMATS = ("%m.%d.%Y", "%d.%m.%Y", "%Y-%m-%d", "%Y.%m.%d", "%d-%m-%Y")
+
 
 @dataclass(frozen=True)
 class LdapProfile:
@@ -24,6 +27,7 @@ class LdapProfile:
     phone_groups: dict = field(default_factory=dict)
     flag_attributes: dict = field(default_factory=dict)
     date_attributes: dict = field(default_factory=dict)
+    birthday_formats: tuple = ()
 
     def attributes(self) -> list:
         attrs = {self.guid_attribute, self.changed_attribute, "distinguishedName"}
@@ -75,6 +79,7 @@ AD_PROFILE = LdapProfile(
         "is_transferred": "extensionAttribute6",
     },
     date_attributes={"birthday": "extensionAttribute1"},
+    birthday_formats=AD_BIRTHDAY_FORMATS,
     guid_attribute="objectGUID",
     changed_attribute="whenChanged",
     usn_attribute="uSNChanged",
@@ -135,6 +140,7 @@ class LdapSettings:
     receive_timeout: int = 60
     deactivate_missing: bool = True
     min_entries_for_deactivation: int = 1
+    birthday_formats: tuple = ()
 
     @property
     def _parsed(self):
@@ -196,4 +202,5 @@ def load_settings(overrides: Optional[dict] = None) -> LdapSettings:
         receive_timeout=int(raw.get("RECEIVE_TIMEOUT", 60)),
         deactivate_missing=bool(raw.get("DEACTIVATE_MISSING", True)),
         min_entries_for_deactivation=int(raw.get("MIN_ENTRIES_FOR_DEACTIVATION", 1)),
+        birthday_formats=tuple(raw.get("BIRTHDAY_FORMATS") or ()),
     )

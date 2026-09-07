@@ -35,6 +35,7 @@ def _ldap_block(code: str, prefix: str) -> dict:
         "base_dn": env(f"{prefix}_BASE_DN", ""),
         "search_ous": env_list(f"{prefix}_SEARCH_OUS", ""),
         "user_filter": env(f"{prefix}_USER_FILTER", ""),
+        "birthday_format": env(f"{prefix}_BIRTHDAY_FORMAT", ""),
         "include_disabled": env_bool(f"{prefix}_INCLUDE_DISABLED", True),
         "page_size": env_int(f"{prefix}_PAGE_SIZE", 500),
     }

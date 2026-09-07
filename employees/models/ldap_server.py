@@ -44,6 +44,10 @@ class LdapServer(BaseModel):
     base_dn = models.CharField("Базовая ветка", max_length=512)
     search_ous = models.JSONField("Ветки поиска (OU)", default=list, blank=True)
     user_filter = models.CharField("Фильтр пользователей", max_length=512, blank=True)
+    birthday_format = models.CharField(
+        "Формат даты рождения", max_length=32, blank=True,
+        help_text="Например MM.dd.yyyy или dd.MM.yyyy. Пусто - порядок по умолчанию.",
+    )
     include_disabled = models.BooleanField(
         "Забирать отключённые учётки", default=True,
         help_text="Старый сервис забирал всех и помечал уволенных state=0 - поведение сохранено.",
@@ -77,6 +81,16 @@ class LdapServer(BaseModel):
             return f"переменная окружения {self.bind_password_env}"
         return "хранится в БД" if self.bind_password else "не задан"
 
+    def python_birthday_formats(self):
+        """Java-шаблон формата даты в вид, понятный Python."""
+        if not self.birthday_format:
+            return None
+        pattern = (
+            self.birthday_format.replace("yyyy", "%Y").replace("yy", "%y")
+            .replace("MM", "%m").replace("dd", "%d")
+        )
+        return (pattern,)
+
     def as_overrides(self) -> dict:
         return {
             "PROFILE": self.profile,
@@ -93,6 +107,7 @@ class LdapServer(BaseModel):
             "SEARCH_OUS": list(self.search_ous or []),
             "USER_FILTER": self.user_filter,
             "INCLUDE_DISABLED": self.include_disabled,
+            "BIRTHDAY_FORMATS": self.python_birthday_formats(),
             "PAGE_SIZE": self.page_size,
             "TIMEOUT": self.timeout,
             "RECEIVE_TIMEOUT": self.receive_timeout,

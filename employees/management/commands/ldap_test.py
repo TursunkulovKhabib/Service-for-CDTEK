@@ -116,7 +116,7 @@ class Command(BaseCommand):
 
                 self.stdout.write(self.style.MIGRATE_HEADING("\nЗаписи"))
                 for entry in client.iter_users(limit=limit):
-                    payload = build_payload(entry, settings_obj.profile)
+                    payload = build_payload(entry, settings_obj.profile, settings_obj.birthday_formats)
                     results.append({"raw": entry, "mapped": payload} if options["raw"] else payload)
                     if options["json"]:
                         continue

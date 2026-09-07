@@ -60,6 +60,7 @@ class CompanyService(BaseService):
                 include_disabled=ldap.get("include_disabled", True),
                 search_ous=ldap.get("search_ous", []),
                 user_filter=ldap.get("user_filter", ""),
+                birthday_format=ldap.get("birthday_format", ""),
                 is_active=item.get("is_active", True),
             )
             stats["servers"] += 1

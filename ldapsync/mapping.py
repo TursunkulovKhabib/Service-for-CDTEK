@@ -90,7 +90,7 @@ def parse_ldap_datetime(value):
     return parsed
 
 
-def parse_birthday(value):
+def parse_birthday(value, formats=None):
     """extensionAttribute1: дата рождения приходит в разных форматах.
 
     Старый сервис брал только строки ровно из 10 символов ("dd.MM.yyyy") и
@@ -101,7 +101,7 @@ def parse_birthday(value):
         return None
 
     head = text.replace("T", " ").split(" ")[0]
-    for pattern in BIRTHDAY_FORMATS:
+    for pattern in (formats or BIRTHDAY_FORMATS):
         try:
             return datetime.strptime(head, pattern).date()
         except ValueError:
@@ -154,7 +154,7 @@ def flag_is_on(attrs: dict, attribute: str) -> bool:
     return clean_str(attrs.get(attribute), 16) == "1"
 
 
-def build_payload(entry: dict, profile: LdapProfile) -> dict:
+def build_payload(entry: dict, profile: LdapProfile, birthday_formats=None) -> dict:
     attrs = entry.get("attributes") or {}
     dn = entry.get("dn") or clean_str(attrs.get("distinguishedName"), MAX_LEN["distinguished_name"])
 
@@ -171,8 +171,9 @@ def build_payload(entry: dict, profile: LdapProfile) -> dict:
     for field_name, attribute_names in profile.phone_groups.items():
         payload[field_name] = join_phones(attrs, attribute_names)[: MAX_LEN.get(field_name, 255)]
 
+    formats = birthday_formats or profile.birthday_formats or None
     for field_name, attribute in profile.date_attributes.items():
-        payload[field_name] = parse_birthday(attrs.get(attribute))
+        payload[field_name] = parse_birthday(attrs.get(attribute), formats)
 
     payload["personal_data_consent"] = flag_is_on(
         attrs, profile.flag_attributes.get("personal_data_consent", "")

@@ -4,6 +4,15 @@ from ldapsync.client import LdapClient, LdapSyncError
 from ldapsync.config import load_settings
 from ldapsync.mapping import build_payload, clean_str, parse_birthday
 
+DATE_CANDIDATES = {
+    "MM.dd.yyyy": "%m.%d.%Y",
+    "dd.MM.yyyy": "%d.%m.%Y",
+    "yyyy-MM-dd": "%Y-%m-%d",
+    "yyyy.MM.dd": "%Y.%m.%d",
+    "dd-MM-yyyy": "%d-%m-%Y",
+    "MM/dd/yyyy": "%m/%d/%Y",
+}
+
 
 class Command(BaseCommand):
     help = (
@@ -28,6 +37,7 @@ class Command(BaseCommand):
         mapped_filled = {}
         date_shapes = {name: {} for name in config.profile.date_attributes.values()}
         date_parsed = {name: 0 for name in config.profile.date_attributes.values()}
+        date_candidates = {name: {} for name in config.profile.date_attributes.values()}
         flag_on = {name: 0 for name in config.profile.flag_attributes.values()}
         flag_values = {name: {} for name in config.profile.flag_attributes.values()}
         total = 0
@@ -48,8 +58,13 @@ class Command(BaseCommand):
                         if raw:
                             shape = f"{len(raw)} симв."
                             date_shapes[name][shape] = date_shapes[name].get(shape, 0) + 1
-                            if parse_birthday(raw):
+                            if parse_birthday(raw, config.birthday_formats or None):
                                 date_parsed[name] += 1
+                            for label, pattern in DATE_CANDIDATES.items():
+                                if parse_birthday(raw, (pattern,)):
+                                    date_candidates[name][label] = (
+                                        date_candidates[name].get(label, 0) + 1
+                                    )
 
                     for name in flag_values:
                         raw = clean_str(attrs.get(name), 32)
@@ -58,7 +73,7 @@ class Command(BaseCommand):
                             if raw == "1":
                                 flag_on[name] += 1
 
-                    payload = build_payload(entry, config.profile)
+                    payload = build_payload(entry, config.profile, config.birthday_formats)
                     for field, value in payload.items():
                         if value not in (None, "", b"", False):
                             mapped_filled[field] = mapped_filled.get(field, 0) + 1
@@ -105,6 +120,12 @@ class Command(BaseCommand):
             self.stdout.write(f"    распознано: {date_parsed[name]}")
             for shape, count in sorted(shapes.items()):
                 self.stdout.write(f"      {shape:12} {count:5}")
+            self.stdout.write("    подходит формат:")
+            for label, count in sorted(date_candidates[name].items(), key=lambda pair: -pair[1]):
+                share = round(count * 100 / filled_count)
+                mark = " <- покрывает все значения" if count == filled_count else ""
+                self.stdout.write(f"      {label:12} {count:5} ({share:3}%){mark}")
+
             if date_parsed[name] < filled_count:
                 self.stdout.write(self.style.WARNING(
                     f"    не разобрано {filled_count - date_parsed[name]} значений - "
