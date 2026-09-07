@@ -5,7 +5,12 @@ from .abstract import ActiveQuerySet, BaseModel
 
 class EmployeeQuerySet(ActiveQuerySet):
     def published(self):
-        return self.filter(is_active=True, is_hidden=False)
+        """То, что отдаётся наружу.
+
+        Записи без почты отсекаются: в старом сервисе каждый запрос содержал
+        "u.email is not null", и это отсекало служебные учётки вроде SR Toir.
+        """
+        return self.filter(is_active=True, is_hidden=False).exclude(email="")
 
     def for_company(self, code: str):
         return self.filter(company__code=code)
@@ -109,7 +114,7 @@ class Employee(BaseModel):
 
     @property
     def is_published(self) -> bool:
-        return self.is_active and not self.is_hidden
+        return self.is_active and not self.is_hidden and bool(self.email)
 
     @property
     def state(self) -> int:

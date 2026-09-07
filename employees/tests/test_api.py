@@ -59,7 +59,12 @@ class ApiFixtureMixin:
         )
         Employee.objects.create(
             object_guid=uuid.uuid4(), sam_account_name="uvolen", full_name="Уволенный Сотрудник",
-            department="Отдел разработки", company=cls.cdtek, is_active=False,
+            email="uvolen@cdtek.ru", department="Отдел разработки",
+            company=cls.cdtek, is_active=False,
+        )
+        cls.service_account = Employee.objects.create(
+            object_guid=uuid.uuid4(), sam_account_name="sr_toir", full_name="SR Toir",
+            company=cls.cdtek,
         )
 
 
@@ -165,6 +170,11 @@ class LegacyContractTests(ApiFixtureMixin, TestCase):
         payload = self.call("nosuchmethod")
         self.assertEqual(payload["code"], "error")
         self.assertEqual(payload["message"], "No action found!")
+
+    def test_service_account_without_email_is_not_published(self):
+        names = [row["full_name"] for row in self.call("getuserlist", {"dtfrom": "01.01.2020"})["object"]]
+        self.assertNotIn("SR Toir", names)
+        self.assertTrue(Employee.objects.filter(sam_account_name="sr_toir").exists())
 
     def test_inactive_employee_is_never_returned(self):
         names = [row["full_name"] for row in self.call("searchuserlist", {"q": "уволен"})["object"]]
