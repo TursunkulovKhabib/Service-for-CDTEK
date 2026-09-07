@@ -162,6 +162,11 @@ class LdapSettings:
         return self._parsed.port or self.port or (636 if self.effective_use_ssl else 389)
 
     @property
+    def effective_birthday_formats(self) -> tuple:
+        """Формат подключения важнее, иначе берём порядок из профиля каталога."""
+        return tuple(self.birthday_formats) or tuple(self.profile.birthday_formats)
+
+    @property
     def search_bases(self) -> list:
         return list(self.search_ous) if self.search_ous else [self.base_dn]
 

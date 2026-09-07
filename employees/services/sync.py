@@ -76,7 +76,7 @@ class LdapSyncService:
                 since = to_generalized_time(changed_since) if changed_since else None
 
                 for entry in client.iter_users(changed_since=since, limit=limit):
-                    payload = build_payload(entry, config.profile, config.birthday_formats)
+                    payload = build_payload(entry, config.profile, config.effective_birthday_formats)
                     run.entries_read += 1
                     seen_guids.add(payload["object_guid"])
 

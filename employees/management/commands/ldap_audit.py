@@ -58,7 +58,7 @@ class Command(BaseCommand):
                         if raw:
                             shape = f"{len(raw)} симв."
                             date_shapes[name][shape] = date_shapes[name].get(shape, 0) + 1
-                            if parse_birthday(raw, config.birthday_formats or None):
+                            if parse_birthday(raw, config.effective_birthday_formats or None):
                                 date_parsed[name] += 1
                             for label, pattern in DATE_CANDIDATES.items():
                                 if parse_birthday(raw, (pattern,)):
@@ -73,7 +73,7 @@ class Command(BaseCommand):
                             if raw == "1":
                                 flag_on[name] += 1
 
-                    payload = build_payload(entry, config.profile, config.birthday_formats)
+                    payload = build_payload(entry, config.profile, config.effective_birthday_formats)
                     for field, value in payload.items():
                         if value not in (None, "", b"", False):
                             mapped_filled[field] = mapped_filled.get(field, 0) + 1
