@@ -12,6 +12,8 @@ DN_NAMESPACE = uuid.UUID("6ba7b812-9dad-11d1-80b4-00c04fd430c8")
 
 PHONE_SEPARATOR = "; "
 
+BIRTHDAY_FORMATS = ("%d.%m.%Y", "%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y", "%d.%m.%y")
+
 MAX_LEN = {
     "sam_account_name": 128,
     "user_principal_name": 255,
@@ -89,14 +91,29 @@ def parse_ldap_datetime(value):
 
 
 def parse_birthday(value):
-    """extensionAttribute1 в AD хранится строкой dd.MM.yyyy ровно из 10 символов."""
-    text = clean_str(value, 32)
-    if len(text) != 10:
+    """extensionAttribute1: дата рождения приходит в разных форматах.
+
+    Старый сервис брал только строки ровно из 10 символов ("dd.MM.yyyy") и
+    терял остальные - в частности записи со временем в конце.
+    """
+    text = clean_str(value, 64)
+    if not text:
         return None
-    try:
-        return datetime.strptime(text, "%d.%m.%Y").date()
-    except ValueError:
-        return None
+
+    head = text.replace("T", " ").split(" ")[0]
+    for pattern in BIRTHDAY_FORMATS:
+        try:
+            return datetime.strptime(head, pattern).date()
+        except ValueError:
+            continue
+
+    generalized = re.match(r"^(\d{8})", head)
+    if generalized:
+        try:
+            return datetime.strptime(generalized.group(1), "%Y%m%d").date()
+        except ValueError:
+            pass
+    return None
 
 
 def to_generalized_time(value: datetime) -> str:

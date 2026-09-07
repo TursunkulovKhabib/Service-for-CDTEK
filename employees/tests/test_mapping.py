@@ -5,7 +5,13 @@ from django.test import TestCase, override_settings
 
 from employees.tests.factories import ad_entry
 from ldapsync.config import TRANSFER_POSITION_TEXT, get_profile, load_settings
-from ldapsync.mapping import build_payload, digits_only, guid_to_uuid, parse_ldap_datetime
+from ldapsync.mapping import (
+    build_payload,
+    digits_only,
+    guid_to_uuid,
+    parse_birthday,
+    parse_ldap_datetime,
+)
 
 AD = get_profile("ad")
 
@@ -42,8 +48,17 @@ class MappingTests(TestCase):
         self.assertEqual(payload["birthday"], date(1990, 5, 17))
         self.assertTrue(payload["personal_data_consent"])
 
-    def test_birthday_of_wrong_length_is_ignored(self):
-        self.assertIsNone(build_payload(ad_entry(extensionAttribute1="1990"), AD)["birthday"])
+    def test_birthday_is_parsed_in_every_format_found_in_ad(self):
+        expected = date(1990, 5, 17)
+        for raw in ("17.05.1990", "17.05.1990 0:00:00", "1990-05-17",
+                    "1990-05-17 00:00:00", "19900517000000.0Z", "17.05.90"):
+            with self.subTest(raw=raw):
+                self.assertEqual(parse_birthday(raw), expected)
+
+    def test_birthday_of_unparsable_value_is_ignored(self):
+        for raw in ("1990", "", "не дата", None):
+            with self.subTest(raw=raw):
+                self.assertIsNone(parse_birthday(raw))
 
     def test_transfer_flag_replaces_position(self):
         payload = build_payload(ad_entry(extensionAttribute6="1"), AD)

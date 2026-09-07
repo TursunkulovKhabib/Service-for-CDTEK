@@ -2,7 +2,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from ldapsync.client import LdapClient, LdapSyncError
 from ldapsync.config import load_settings
-from ldapsync.mapping import build_payload
+from ldapsync.mapping import build_payload, clean_str, parse_birthday
 
 
 class Command(BaseCommand):
@@ -26,6 +26,10 @@ class Command(BaseCommand):
         requested = config.profile.attributes()
         filled = {name: 0 for name in requested}
         mapped_filled = {}
+        date_shapes = {name: {} for name in config.profile.date_attributes.values()}
+        date_parsed = {name: 0 for name in config.profile.date_attributes.values()}
+        flag_on = {name: 0 for name in config.profile.flag_attributes.values()}
+        flag_values = {name: {} for name in config.profile.flag_attributes.values()}
         total = 0
         example = None
 
@@ -39,6 +43,21 @@ class Command(BaseCommand):
                         value = attrs.get(name)
                         if value not in (None, "", [], b""):
                             filled[name] += 1
+                    for name in date_shapes:
+                        raw = clean_str(attrs.get(name), 64)
+                        if raw:
+                            shape = f"{len(raw)} симв."
+                            date_shapes[name][shape] = date_shapes[name].get(shape, 0) + 1
+                            if parse_birthday(raw):
+                                date_parsed[name] += 1
+
+                    for name in flag_values:
+                        raw = clean_str(attrs.get(name), 32)
+                        if raw:
+                            flag_values[name][raw] = flag_values[name].get(raw, 0) + 1
+                            if raw == "1":
+                                flag_on[name] += 1
+
                     payload = build_payload(entry, config.profile)
                     for field, value in payload.items():
                         if value not in (None, "", b"", False):
@@ -74,6 +93,31 @@ class Command(BaseCommand):
         for field in sorted(mapped_filled):
             count = mapped_filled[field]
             self.stdout.write(f"    {field:32} {count:5} ({round(count * 100 / total):3}%)")
+
+        for name, shapes in date_shapes.items():
+            if not shapes:
+                continue
+            filled_count = sum(shapes.values())
+            self.stdout.write(self.style.MIGRATE_HEADING(
+                f"\nДаты в {name} - значения не выводятся"
+            ))
+            self.stdout.write(f"    заполнено:  {filled_count}")
+            self.stdout.write(f"    распознано: {date_parsed[name]}")
+            for shape, count in sorted(shapes.items()):
+                self.stdout.write(f"      {shape:12} {count:5}")
+            if date_parsed[name] < filled_count:
+                self.stdout.write(self.style.WARNING(
+                    f"    не разобрано {filled_count - date_parsed[name]} значений - "
+                    "нужен ещё один формат даты"
+                ))
+
+        for name, values in flag_values.items():
+            if not values:
+                continue
+            self.stdout.write(self.style.MIGRATE_HEADING(f"\nЗначения флага {name}"))
+            for value, count in sorted(values.items(), key=lambda pair: -pair[1]):
+                mark = " <- срабатывает" if value == "1" else ""
+                self.stdout.write(f"    {value:20} {count:5}{mark}")
 
         empty_fields = sorted(
             f for f in build_payload({"dn": "", "attributes": {}}, config.profile)

@@ -36,7 +36,7 @@
 | `homePhone` | `phone_mobile` | `phone_mobile` | именно `homePhone`, не `mobile` |
 | `telephoneNumber; mobile; facsimileTelephoneNumber; pager` | `phone_mobile_work` | `phone_mobile_work` | склейка через `; ` |
 | `otherTelephone; ipPhone` | `phone_internal` | `phone_internal` | склейка через `; ` |
-| `extensionAttribute1` | `bithday` | `birthday` | строка `dd.MM.yyyy`, ровно 10 символов, иначе `null` |
+| `extensionAttribute1` | `bithday` | `birthday` | несколько форматов, см. раздел ниже |
 | `employeeNumber` | `uid_zup` | `zup_uid` | ключ связи с 1С ЗУП |
 | `manager` | `manager` → ФИО, `manager_id` | `manager_dn` + FK `manager` | в Java на каждого делался отдельный запрос в AD |
 | `extensionAttribute2` | `project_name` | `project_name` | |
@@ -71,6 +71,35 @@
   extension-атрибуты, дата рождения, подмена должности, отключённые учётки.
 * Прогон на двух тестовых доменах Samba: 6 + 3 записи, уволенные приходят и
   помечаются неактивными.
+
+## Сверено с боевым AD ЦЦ ТЭК (59 записей)
+
+| Атрибут | Заполнено | Вывод |
+| --- | --- | --- |
+| `extensionAttribute1` | 85% | дата рождения - подтверждено |
+| `extensionAttribute7` | 93% | согласие на ПДн - подтверждено |
+| `extensionAttribute6` | 85% | признак перевода - подтверждено (срабатывает только на значении `1`) |
+| `homePhone` | 83% | мобильный - подтверждено |
+| `telephoneNumber` / `mobile` | 86% / 5% | рабочий - подтверждено |
+| `ipPhone` | 53% | внутренний - подтверждено |
+| `employeeNumber` | 92% | UID в 1С ЗУП - подтверждено |
+| `thumbnailPhoto` | 88% | фото - подтверждено |
+| `l` | 85% | регион - подтверждено |
+| `extensionAttribute2` | 0% | проект **не заполняется** |
+| `extensionAttribute4` | 0% | код подразделения **не заполняется** |
+| `physicalDeliveryOfficeName` | 0% | офис **не заполняется** |
+| `otherTelephone`, `pager`, `facsimileTelephoneNumber` | 0% | не используются |
+| `manager` | 8% | руководители в каталоге почти не проставлены |
+
+### Формат даты рождения
+
+`extensionAttribute1` заполнен у 85% записей, но старый Java-сервис брал только
+строки ровно из 10 символов (`if (ext1.length() == 10)`) — остальные молча
+терял. Парсер принимает несколько форматов: `dd.MM.yyyy`, `yyyy-MM-dd`,
+`dd/MM/yyyy`, `MM/dd/yyyy`, `dd.MM.yy`, generalized time и любой из них со
+временем в конце. Команда `ldap_audit` показывает распределение длин значений и
+сколько из них разобрано — если останутся нераспознанные, формат нужно
+дописать в `BIRTHDAY_FORMATS`.
 
 ## Чего не хватает для сверки
 
