@@ -47,6 +47,17 @@ class SyncServiceTests(TestCase):
         self.assertEqual(employee.company, self.company)
         self.assertEqual(employee.ldap_server, self.server)
 
+    def test_userid_repeats_legacy_format(self):
+        self.run_sync_with([ad_entry()])
+        self.assertEqual(Employee.objects.get().userid, f"ivanov@{self.company.domain}")
+
+    def test_org_fields_come_from_company(self):
+        self.run_sync_with([ad_entry()])
+        employee = Employee.objects.get()
+        self.assertEqual(employee.org_id, self.company.org_id)
+        self.assertEqual(employee.org_name, self.company.name)
+        self.assertEqual(employee.country_name, "Россия")
+
     def test_rename_keeps_single_record(self):
         self.run_sync_with([ad_entry()])
         self.run_sync_with([ad_entry(sAMAccountName="ivanov2", sn="Петров", displayName="Петров Иван")])
@@ -71,9 +82,9 @@ class SyncServiceTests(TestCase):
 
     def test_locked_fields_survive_sync(self):
         self.run_sync_with([ad_entry()])
-        Employee.objects.update(locked_fields=["phone"], phone="+7 495 000-00-00")
-        self.run_sync_with([ad_entry(telephoneNumber="+7 495 999-99-99")])
-        self.assertEqual(Employee.objects.get().phone, "+7 495 000-00-00")
+        Employee.objects.update(locked_fields=["phone_mobile"], phone_mobile="+7 495 000-00-00")
+        self.run_sync_with([ad_entry(homePhone="+7 495 999-99-99")])
+        self.assertEqual(Employee.objects.get().phone_mobile, "+7 495 000-00-00")
 
     def test_manager_link_is_resolved(self):
         boss = ad_entry(
@@ -109,7 +120,7 @@ class TwoCompaniesTests(TestCase):
         self.entry_engs = ad_entry(
             objectGUID="{dddddddd-0000-4000-8000-000000000004}",
             sAMAccountName="sokolov", sn="Соколов", givenName="Олег", middleName="",
-            displayName="Соколов Олег", department="Логистика", company="ЭНГС",
+            displayName="Соколов Олег", department="Логистика", company="ЭНГС", homePhone="+7 843 200-10-02",
             dn="CN=Sokolov,OU=Users,DC=branch,DC=local",
         )
 

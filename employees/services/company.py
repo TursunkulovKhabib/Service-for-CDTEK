@@ -30,6 +30,11 @@ class CompanyService(BaseService):
                 description=item.get("description", ""),
                 is_default=item.get("is_default", False),
                 is_active=item.get("is_active", True),
+                org_id=item.get("org_id", ""),
+                domain=item.get("domain", ""),
+                country_id=item.get("country_id", "ru"),
+                country_name=item.get("country_name", "Россия"),
+                integrations=item.get("integrations", {}),
             )
             stats["companies"] += 1
 
@@ -49,7 +54,10 @@ class CompanyService(BaseService):
                 authentication=ldap.get("authentication", "SIMPLE"),
                 bind_dn=ldap.get("bind_dn", ""),
                 bind_password_env=ldap.get("bind_password_env", ""),
+                domain=ldap.get("domain", ""),
                 base_dn=ldap.get("base_dn", ""),
+                page_size=ldap.get("page_size", 500),
+                include_disabled=ldap.get("include_disabled", True),
                 search_ous=ldap.get("search_ous", []),
                 user_filter=ldap.get("user_filter", ""),
                 is_active=item.get("is_active", True),

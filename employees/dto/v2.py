@@ -14,7 +14,7 @@ class EmployeeListDTO(serializers.ModelSerializer):
 
     class Meta:
         model = Employee
-        fields = ("object_guid", "full_name", "title", "department", "phone", "company")
+        fields = ("object_guid", "full_name", "title", "department", "phone_mobile", "company")
 
 
 class EmployeeDetailDTO(serializers.ModelSerializer):
@@ -25,8 +25,8 @@ class EmployeeDetailDTO(serializers.ModelSerializer):
         model = Employee
         fields = (
             "object_guid", "sam_account_name", "full_name", "title", "department",
-            "phone", "mobile_phone", "internal_phone", "email", "company",
-            "office", "manager", "is_active", "last_synced_at",
+            "phone_mobile", "phone_mobile_work", "phone_internal", "email", "company",
+            "office", "region", "birthday", "manager", "is_active", "last_synced_at",
         )
 
 

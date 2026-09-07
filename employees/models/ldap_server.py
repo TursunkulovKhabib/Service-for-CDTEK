@@ -40,10 +40,14 @@ class LdapServer(BaseModel):
         help_text="Имя переменной окружения, например LDAP_CDTEK_BIND_PASSWORD.",
     )
 
+    domain = models.CharField("Домен", max_length=128, blank=True)
     base_dn = models.CharField("Базовая ветка", max_length=512)
     search_ous = models.JSONField("Ветки поиска (OU)", default=list, blank=True)
     user_filter = models.CharField("Фильтр пользователей", max_length=512, blank=True)
-    include_disabled = models.BooleanField("Забирать отключённые учётки", default=False)
+    include_disabled = models.BooleanField(
+        "Забирать отключённые учётки", default=True,
+        help_text="Старый сервис забирал всех и помечал уволенных state=0 - поведение сохранено.",
+    )
 
     page_size = models.PositiveIntegerField("Размер страницы", default=500)
     timeout = models.PositiveIntegerField("Таймаут подключения, с", default=30)

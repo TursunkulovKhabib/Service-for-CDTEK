@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 
 from django.utils.dateparse import parse_datetime
 
-from .config import UAC_ACCOUNTDISABLE, LdapProfile
+from .config import TRANSFER_POSITION_TEXT, UAC_ACCOUNTDISABLE, LdapProfile
 
 DN_NAMESPACE = uuid.UUID("6ba7b812-9dad-11d1-80b4-00c04fd430c8")
+
+PHONE_SEPARATOR = "; "
 
 MAX_LEN = {
     "sam_account_name": 128,
@@ -18,22 +20,26 @@ MAX_LEN = {
     "last_name": 128,
     "middle_name": 128,
     "email": 254,
-    "phone": 64,
-    "mobile_phone": 64,
-    "internal_phone": 32,
+    "phone_mobile": 128,
+    "phone_mobile_work": 255,
+    "phone_internal": 128,
+    "region": 255,
     "department": 255,
+    "department_code": 64,
     "title": 255,
     "company_name": 255,
     "office": 255,
     "city": 128,
-    "employee_id": 64,
+    "zup_uid": 64,
+    "project_name": 255,
     "manager_dn": 512,
     "distinguished_name": 512,
     "search_phone": 128,
     "full_name": 255,
+    "description": 255,
 }
 
-SPECIAL_FIELDS = {"account_control", "when_created", "when_changed", "usn_changed"}
+SPECIAL_FIELDS = {"account_control", "when_created", "when_changed", "usn_changed", "photo"}
 
 
 def first(value):
@@ -82,25 +88,53 @@ def parse_ldap_datetime(value):
     return parsed
 
 
+def parse_birthday(value):
+    """extensionAttribute1 в AD хранится строкой dd.MM.yyyy ровно из 10 символов."""
+    text = clean_str(value, 32)
+    if len(text) != 10:
+        return None
+    try:
+        return datetime.strptime(text, "%d.%m.%Y").date()
+    except ValueError:
+        return None
+
+
 def to_generalized_time(value: datetime) -> str:
     return value.astimezone(timezone.utc).strftime("%Y%m%d%H%M%S.0Z")
+
+
+def join_phones(attrs: dict, attribute_names) -> str:
+    """Склейка телефонов через '; ' - как corpphone/internalphone в LDAPService."""
+    parts = []
+    for name in attribute_names:
+        value = clean_str(attrs.get(name), 64)
+        if value:
+            parts.append(value)
+    return PHONE_SEPARATOR.join(parts)
 
 
 def digits_only(*values) -> str:
     out = []
     for value in values:
         if value:
-            out.append(re.sub(r"\D", "", str(value)))
-    return " ".join(part for part in out if part)[: MAX_LEN["search_phone"]]
+            for chunk in str(value).split(PHONE_SEPARATOR.strip()):
+                digits = re.sub(r"\D", "", chunk)
+                if digits:
+                    out.append(digits)
+    return " ".join(out)[: MAX_LEN["search_phone"]]
 
 
 def build_full_name(payload: dict) -> str:
-    if payload.get("last_name") and payload.get("first_name"):
-        parts = [payload.get("last_name"), payload.get("first_name"), payload.get("middle_name")]
-        full = " ".join(p for p in parts if p).strip()
-    else:
-        full = (payload.get("display_name") or payload.get("last_name") or "").strip()
+    """ФИО: 'Фамилия Имя Отчество'; если ФИО не собирается - берём name/displayName."""
+    parts = [payload.get("last_name"), payload.get("first_name"), payload.get("middle_name")]
+    full = " ".join(p for p in parts if p).strip()
+    if not full:
+        full = (payload.get("full_name") or payload.get("display_name") or "").strip()
     return (full or payload.get("sam_account_name") or "")[: MAX_LEN["full_name"]]
+
+
+def flag_is_on(attrs: dict, attribute: str) -> bool:
+    return clean_str(attrs.get(attribute), 16) == "1"
 
 
 def build_payload(entry: dict, profile: LdapProfile) -> dict:
@@ -116,6 +150,18 @@ def build_payload(entry: dict, profile: LdapProfile) -> dict:
         if field_name in SPECIAL_FIELDS:
             continue
         payload[field_name] = clean_str(attrs.get(ldap_attr), MAX_LEN.get(field_name, 255))
+
+    for field_name, attribute_names in profile.phone_groups.items():
+        payload[field_name] = join_phones(attrs, attribute_names)[: MAX_LEN.get(field_name, 255)]
+
+    for field_name, attribute in profile.date_attributes.items():
+        payload[field_name] = parse_birthday(attrs.get(attribute))
+
+    payload["personal_data_consent"] = flag_is_on(
+        attrs, profile.flag_attributes.get("personal_data_consent", "")
+    )
+    if flag_is_on(attrs, profile.flag_attributes.get("is_transferred", "")):
+        payload["title"] = TRANSFER_POSITION_TEXT
 
     uac = first(attrs.get(profile.attribute_map.get("account_control", "")))
     try:
@@ -134,10 +180,13 @@ def build_payload(entry: dict, profile: LdapProfile) -> dict:
     except (TypeError, ValueError):
         payload["usn_changed"] = None
 
-    if not payload.get("display_name"):
-        payload["display_name"] = build_full_name(payload)[: MAX_LEN["display_name"]]
+    photo = first(attrs.get(profile.attribute_map.get("photo", "")))
+    payload["photo"] = photo if isinstance(photo, bytes) else None
+
     payload["full_name"] = build_full_name(payload)
+    if not payload.get("display_name"):
+        payload["display_name"] = payload["full_name"][: MAX_LEN["display_name"]]
     payload["search_phone"] = digits_only(
-        payload.get("phone"), payload.get("mobile_phone"), payload.get("internal_phone")
+        payload.get("phone_mobile"), payload.get("phone_mobile_work"), payload.get("phone_internal")
     )
     return payload

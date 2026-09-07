@@ -16,7 +16,7 @@ class EmployeeAdmin(CeleryTriggerMixin, BaseModelAdmin):
     list_filter = ("is_active", "is_hidden", "ad_enabled", "company", "ldap_server", "department")
     search_fields = (
         "full_name", "display_name", "sam_account_name", "email",
-        "search_phone", "department", "title", "employee_id",
+        "search_phone", "department", "title", "zup_uid",
     )
     ordering = ("full_name",)
     autocomplete_fields = ("manager", "company")
@@ -24,31 +24,33 @@ class EmployeeAdmin(CeleryTriggerMixin, BaseModelAdmin):
     actions_list = ["run_full_sync", "run_incremental_sync"]
 
     readonly_fields = (
-        "object_guid", "sam_account_name", "user_principal_name", "distinguished_name",
-        "ldap_server", "ad_enabled", "account_control", "when_created", "when_changed",
-        "usn_changed", "first_seen_at", "last_synced_at",
+        "object_guid", "userid", "sam_account_name", "user_principal_name",
+        "distinguished_name", "ldap_server", "ad_enabled", "account_control",
+        "when_created", "when_changed", "usn_changed", "first_seen_at", "last_synced_at",
     )
     fieldsets = (
         ("Сотрудник", {
             "fields": ("full_name", "display_name", ("last_name", "first_name", "middle_name"), "title"),
         }),
         ("Контакты", {
-            "fields": ("email", ("phone", "mobile_phone", "internal_phone"), "search_phone"),
+            "fields": ("email", ("phone_mobile", "phone_mobile_work", "phone_internal"),
+                       "search_phone", "birthday"),
         }),
         ("Оргструктура", {
-            "fields": ("company", "company_name", "department", "office", "city",
-                       "employee_id", "manager", "manager_dn"),
+            "fields": ("company", "company_name", "department", "department_code",
+                       "region", "office", "project_name", "manager", "manager_dn"),
         }),
         ("Публикация", {
-            "fields": ("is_active", "is_hidden", "locked_fields", "notes", "description"),
+            "fields": ("is_active", "is_hidden", "personal_data_consent",
+                       "locked_fields", "notes", "description"),
         }),
         ("Данные Active Directory", {
             "classes": ("collapse",),
             "fields": (
-                "object_guid", "sam_account_name", "user_principal_name", "distinguished_name",
-                "ldap_server", "ad_enabled", "account_control", "when_created", "when_changed",
-                "usn_changed", "first_seen_at", "last_synced_at", "deactivated_at",
-                "created_at", "updated_at",
+                "object_guid", "userid", "sam_account_name", "user_principal_name",
+                "distinguished_name", "ldap_server", "ad_enabled", "account_control",
+                "when_created", "when_changed", "usn_changed", "first_seen_at",
+                "last_synced_at", "deactivated_at", "created_at", "updated_at",
             ),
         }),
     )

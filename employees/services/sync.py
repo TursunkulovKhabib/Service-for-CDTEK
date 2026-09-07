@@ -17,10 +17,11 @@ logger = logging.getLogger("ldapsync")
 SYNCED_FIELDS = (
     "sam_account_name", "user_principal_name", "distinguished_name",
     "display_name", "full_name", "last_name", "first_name", "middle_name",
-    "email", "phone", "mobile_phone", "internal_phone", "search_phone",
-    "department", "title", "company_name", "office", "city", "employee_id",
-    "description", "manager_dn", "ad_enabled", "account_control",
-    "when_created", "when_changed", "usn_changed",
+    "birthday", "email", "phone_mobile", "phone_mobile_work", "phone_internal",
+    "search_phone", "region", "office", "department", "department_code",
+    "title", "project_name", "company_name", "description", "manager_dn",
+    "personal_data_consent", "photo", "zup_uid", "ad_enabled",
+    "account_control", "when_created", "when_changed", "usn_changed",
 )
 
 
@@ -145,6 +146,14 @@ class LdapSyncService:
             locked = set(employee.locked_fields or [])
             values = {name: payload[name] for name in SYNCED_FIELDS if name in payload}
             changed = employee.set_fields(values, skip=locked)
+
+            userid = payload.get("sam_account_name", "")
+            domain = getattr(ldap_server, "domain", "") if ldap_server else ""
+            if userid and domain:
+                userid = f"{userid}@{domain}"
+            if userid and employee.userid != userid:
+                employee.userid = userid
+                changed.append("userid")
 
             if company is not None and employee.company_id != company.id:
                 employee.company = company

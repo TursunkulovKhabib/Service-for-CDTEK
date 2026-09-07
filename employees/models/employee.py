@@ -10,6 +10,9 @@ class EmployeeQuerySet(ActiveQuerySet):
     def for_company(self, code: str):
         return self.filter(company__code=code)
 
+    def with_consent(self):
+        return self.filter(personal_data_consent=True)
+
 
 class EmployeeManager(models.Manager.from_queryset(EmployeeQuerySet)):
     pass
@@ -20,6 +23,10 @@ class Employee(BaseModel):
     sam_account_name = models.CharField("Логин", max_length=128, blank=True, db_index=True)
     user_principal_name = models.CharField("UPN", max_length=255, blank=True)
     distinguished_name = models.CharField("DN", max_length=512, blank=True)
+    userid = models.CharField(
+        "userid старой системы", max_length=255, blank=True, db_index=True,
+        help_text="sAMAccountName@domain - ключ записи в прежнем сервисе.",
+    )
 
     company = models.ForeignKey(
         "employees.Company", verbose_name="Организация", null=True, blank=True,
@@ -36,30 +43,44 @@ class Employee(BaseModel):
     last_name = models.CharField("Фамилия", max_length=128, blank=True)
     first_name = models.CharField("Имя", max_length=128, blank=True)
     middle_name = models.CharField("Отчество", max_length=128, blank=True)
+    birthday = models.DateField("Дата рождения", null=True, blank=True)
 
     email = models.CharField("Email", max_length=254, blank=True, db_index=True)
-    phone = models.CharField("Телефон", max_length=64, blank=True)
-    mobile_phone = models.CharField("Мобильный", max_length=64, blank=True)
-    internal_phone = models.CharField("Внутренний", max_length=32, blank=True)
+    phone_mobile = models.CharField("Мобильный", max_length=128, blank=True)
+    phone_mobile_work = models.CharField("Рабочий", max_length=255, blank=True)
+    phone_internal = models.CharField("Внутренний", max_length=128, blank=True)
     search_phone = models.CharField("Телефоны (цифры)", max_length=128, blank=True, db_index=True)
 
-    department = models.CharField("Подразделение", max_length=255, blank=True, db_index=True)
-    title = models.CharField("Должность", max_length=255, blank=True)
+    region = models.CharField("Регион", max_length=255, blank=True)
     office = models.CharField("Офис", max_length=255, blank=True)
-    city = models.CharField("Город", max_length=128, blank=True)
-    employee_id = models.CharField("Табельный номер", max_length=64, blank=True)
+    department = models.CharField("Подразделение", max_length=255, blank=True, db_index=True)
+    department_code = models.CharField("Код подразделения", max_length=64, blank=True)
+    title = models.CharField("Должность", max_length=255, blank=True)
+    project_name = models.CharField("Проект", max_length=255, blank=True)
     description = models.CharField("Описание", max_length=255, blank=True)
+
     manager_dn = models.CharField("DN руководителя", max_length=512, blank=True)
     manager = models.ForeignKey(
         "self", verbose_name="Руководитель", null=True, blank=True,
         on_delete=models.SET_NULL, related_name="subordinates",
     )
 
+    photo = models.BinaryField("Фото (thumbnailPhoto)", null=True, blank=True, editable=False)
+
     is_hidden = models.BooleanField("Скрыт из API", default=False)
     ad_enabled = models.BooleanField("Учётка включена в AD", default=True)
     account_control = models.IntegerField("userAccountControl", null=True, blank=True)
+    personal_data_consent = models.BooleanField("Согласие на обработку ПДн", default=False)
     notes = models.TextField("Заметки", blank=True)
     locked_fields = models.JSONField("Поля, закреплённые вручную", default=list, blank=True)
+
+    zup_uid = models.CharField("UID в 1С ЗУП", max_length=64, blank=True, db_index=True)
+    zup_state = models.CharField("Статус в 1С ЗУП", max_length=128, blank=True)
+    zup_state_dateto = models.DateField("Статус до", null=True, blank=True)
+    do_user_uid = models.CharField("UID в 1С ДО", max_length=64, blank=True)
+    do_user_state = models.IntegerField("Статус в 1С ДО", default=0)
+    do_user_role = models.CharField("Роль в 1С ДО", max_length=128, blank=True)
+    vacation_days = models.CharField("Дни отпуска", max_length=64, blank=True)
 
     when_created = models.DateTimeField("Создан в AD", null=True, blank=True)
     when_changed = models.DateTimeField("Изменён в AD", null=True, blank=True, db_index=True)
@@ -84,8 +105,37 @@ class Employee(BaseModel):
 
     @property
     def any_phone(self) -> str:
-        return self.phone or self.mobile_phone or self.internal_phone
+        return self.phone_mobile or self.phone_mobile_work or self.phone_internal
 
     @property
     def is_published(self) -> bool:
         return self.is_active and not self.is_hidden
+
+    @property
+    def state(self) -> int:
+        """Старая система хранила состояние числом: 1 - работает, 0 - уволен."""
+        return 1 if self.is_active else 0
+
+    @property
+    def photo_base64(self) -> str:
+        import base64
+
+        if not self.photo:
+            return ""
+        return base64.b64encode(bytes(self.photo)).decode("ascii")
+
+    @property
+    def org_id(self) -> str:
+        return self.company.org_id if self.company else ""
+
+    @property
+    def org_name(self) -> str:
+        return self.company.name if self.company else ""
+
+    @property
+    def country_id(self) -> str:
+        return self.company.country_id if self.company else ""
+
+    @property
+    def country_name(self) -> str:
+        return self.company.country_name if self.company else ""

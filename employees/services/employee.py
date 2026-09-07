@@ -29,6 +29,25 @@ class EmployeeService(BaseService):
     def departments(self, company: str = ""):
         return list(self.repository.departments(company))
 
+    def updated_since(self, moment):
+        return self.repository.updated_since(moment)
+
+    def by_emails(self, emails, consent: bool = False):
+        return self.repository.by_emails(emails, consent=consent)
+
+    def search_rank(self, words, **kwargs):
+        return self.repository.search_rank(words, **kwargs)
+
+    def organizations(self):
+        return list(self.repository.organizations())
+
+    def countries(self):
+        return list(self.repository.countries())
+
+    def get_manager_by_zup_uid(self, zup_uid: str):
+        employee = self.repository.first(zup_uid=zup_uid)
+        return employee.manager if employee and employee.manager else None
+
     def hide(self, employee):
         return self.repository.update(employee, is_hidden=True)
 

@@ -43,14 +43,11 @@ class Command(BaseCommand):
         parser.add_argument("--json", action="store_true", help="Вывод в JSON")
 
     def handle(self, *args, **options):
-        from employees.repositories import LdapServerRepository
+        from employees.management.commands.ldap_audit import resolve_connection
 
         overrides = {}
         if options.get("connection_name"):
-            server = LdapServerRepository().get_by_name(options["connection_name"])
-            if server is None:
-                raise CommandError(f"LDAP-подключение '{options['connection_name']}' не найдено")
-            overrides.update(server.as_overrides())
+            overrides.update(resolve_connection(options["connection_name"]).as_overrides())
         if options["demo"]:
             overrides.update(DEMO)
 

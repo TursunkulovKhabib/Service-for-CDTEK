@@ -106,7 +106,7 @@ class LdapClient:
 
         s = self.settings
         search_filter = s.build_filter(changed_since)
-        attributes = s.profile.attributes()
+        attributes = self.supported_attributes(s.profile.attributes())
         yielded = 0
 
         for base in s.search_bases:
@@ -132,6 +132,25 @@ class LdapClient:
                         return
             except LDAPException as exc:
                 raise LdapSyncError(f"Ошибка поиска в '{base}': {exc}") from exc
+
+    def supported_attributes(self, requested: list) -> list:
+        """Отсеивает атрибуты, которых нет в схеме сервера.
+
+        extensionAttribute1..15 приходят в AD вместе со схемой Exchange - на
+        каталоге без неё строгий сервер отвечает 'invalid attribute type' и
+        роняет весь поиск.
+        """
+        schema = getattr(self.connection.server, "schema", None)
+        known = getattr(schema, "attribute_types", None)
+        if not known:
+            return requested
+
+        available = {str(name).lower() for name in known}
+        supported = [name for name in requested if name.lower() in available]
+        skipped = sorted(set(requested) - set(supported))
+        if skipped:
+            logger.warning("Каталог не знает атрибуты, пропускаю: %s", ", ".join(skipped))
+        return supported or requested
 
     def server_info(self) -> dict:
         if self.connection is None:

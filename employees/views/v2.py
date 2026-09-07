@@ -29,7 +29,7 @@ class BaseApiV2ViewSet(viewsets.GenericViewSet):
 class EmployeeViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, BaseApiV2ViewSet):
     lookup_field = "object_guid"
     filterset_class = EmployeeFilter
-    search_fields = ("full_name", "department", "title", "search_phone")
+    search_fields = ("full_name", "department", "title", "search_phone", "email")
     ordering_fields = ("full_name", "department", "title")
     ordering = ("full_name",)
 

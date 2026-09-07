@@ -1,12 +1,11 @@
 from .health import healthcheck
-from .v1 import LegacyDepartmentListView, LegacyEmployeeDetailView, LegacyEmployeeListView
+from .v1 import LegacyApiView, action_view
 from .v2 import CompanyViewSet, EmployeeViewSet, SyncRunViewSet
 
 __all__ = [
     "healthcheck",
-    "LegacyDepartmentListView",
-    "LegacyEmployeeDetailView",
-    "LegacyEmployeeListView",
+    "LegacyApiView",
+    "action_view",
     "CompanyViewSet",
     "EmployeeViewSet",
     "SyncRunViewSet",

@@ -7,6 +7,8 @@ UAC_ACCOUNTDISABLE = 0x2
 
 AD_ENABLED_ONLY = "(!(userAccountControl:1.2.840.113556.1.4.803:=2))"
 
+TRANSFER_POSITION_TEXT = "Перевод сотрудника. Данные обновляются..."
+
 
 @dataclass(frozen=True)
 class LdapProfile:
@@ -19,10 +21,17 @@ class LdapProfile:
     enabled_only_filter: str = ""
     usn_attribute: str = ""
     operational_attributes: tuple = ()
+    phone_groups: dict = field(default_factory=dict)
+    flag_attributes: dict = field(default_factory=dict)
+    date_attributes: dict = field(default_factory=dict)
 
     def attributes(self) -> list:
         attrs = {self.guid_attribute, self.changed_attribute, "distinguishedName"}
         attrs.update(a for a in self.attribute_map.values() if a)
+        for group in self.phone_groups.values():
+            attrs.update(group)
+        attrs.update(self.flag_attributes.values())
+        attrs.update(self.date_attributes.values())
         if self.usn_attribute:
             attrs.add(self.usn_attribute)
         attrs.update(self.operational_attributes)
@@ -35,30 +44,41 @@ AD_PROFILE = LdapProfile(
         "sam_account_name": "sAMAccountName",
         "user_principal_name": "userPrincipalName",
         "display_name": "displayName",
+        "full_name": "name",
         "first_name": "givenName",
         "last_name": "sn",
         "middle_name": "middleName",
-        "email": "mail",
-        "phone": "telephoneNumber",
-        "mobile_phone": "mobile",
-        "internal_phone": "ipPhone",
+        "region": "l",
+        "office": "physicalDeliveryOfficeName",
+        "department_code": "extensionAttribute4",
         "department": "department",
         "title": "title",
-        "company_name": "company",
-        "office": "physicalDeliveryOfficeName",
-        "city": "l",
-        "employee_id": "employeeID",
+        "email": "mail",
+        "zup_uid": "employeeNumber",
         "manager_dn": "manager",
+        "project_name": "extensionAttribute2",
+        "company_name": "company",
         "description": "description",
         "account_control": "userAccountControl",
         "when_created": "whenCreated",
         "when_changed": "whenChanged",
         "usn_changed": "uSNChanged",
+        "photo": "thumbnailPhoto",
     },
+    phone_groups={
+        "phone_mobile": ("homePhone",),
+        "phone_mobile_work": ("telephoneNumber", "mobile", "facsimileTelephoneNumber", "pager"),
+        "phone_internal": ("otherTelephone", "ipPhone"),
+    },
+    flag_attributes={
+        "personal_data_consent": "extensionAttribute7",
+        "is_transferred": "extensionAttribute6",
+    },
+    date_attributes={"birthday": "extensionAttribute1"},
     guid_attribute="objectGUID",
     changed_attribute="whenChanged",
     usn_attribute="uSNChanged",
-    base_filter="(&(objectCategory=person)(objectClass=user)(!(objectClass=computer)))",
+    base_filter="(&(objectCategory=person)(objectClass=user)(sAMAccountName=*))",
     enabled_only_filter=AD_ENABLED_ONLY,
 )
 
@@ -69,12 +89,12 @@ OPENLDAP_PROFILE = LdapProfile(
         "display_name": "cn",
         "last_name": "sn",
         "email": "mail",
-        "phone": "telephoneNumber",
         "department": "ou",
         "title": "title",
         "description": "description",
         "when_changed": "modifyTimestamp",
     },
+    phone_groups={"phone_mobile_work": ("telephoneNumber",)},
     guid_attribute="entryUUID",
     changed_attribute="modifyTimestamp",
     base_filter="(objectClass=inetOrgPerson)",

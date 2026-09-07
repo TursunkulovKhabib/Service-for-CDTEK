@@ -8,16 +8,26 @@ def ad_entry(**overrides):
         "objectGUID": "{c9b1e2d4-1111-4222-8333-444455556666}",
         "sAMAccountName": "ivanov",
         "userPrincipalName": "ivanov@corp.local",
+        "name": "Иванов Иван Иванович",
         "displayName": "Иванов Иван Иванович",
         "givenName": "Иван",
         "sn": "Иванов",
         "middleName": "Иванович",
         "mail": "ivanov@corp.local",
+        "homePhone": "+7 916 000-11-22",
         "telephoneNumber": "+7 (495) 123-45-67",
-        "mobile": "+7 916 000-11-22",
-        "ipPhone": "1234",
+        "mobile": "+7 916 555-44-33",
+        "otherTelephone": "1234",
+        "ipPhone": "5678",
+        "l": "Москва",
+        "physicalDeliveryOfficeName": "Главный офис",
         "department": "Отдел разработки",
+        "extensionAttribute4": "ОР-01",
         "title": "Инженер",
+        "extensionAttribute2": "Проект Север",
+        "extensionAttribute1": "17.05.1990",
+        "extensionAttribute7": "1",
+        "employeeNumber": "zup-0001",
         "company": "ЦЦ ТЭК",
         "userAccountControl": 512,
         "whenChanged": datetime(2026, 8, 1, 10, 0, tzinfo=timezone.utc),
@@ -29,7 +39,14 @@ def ad_entry(**overrides):
 
 
 def make_company(code="cdtek", name="ЦЦ ТЭК", **kwargs):
-    return Company.objects.create(code=code, name=name, **kwargs)
+    defaults = {
+        "org_id": f"{code}.ru",
+        "domain": f"corp.{code}.ru",
+        "country_id": "ru",
+        "country_name": "Россия",
+    }
+    defaults.update(kwargs)
+    return Company.objects.create(code=code, name=name, **defaults)
 
 
 def make_server(company, name="AD тест", **kwargs):
@@ -37,6 +54,7 @@ def make_server(company, name="AD тест", **kwargs):
         "profile": "ad",
         "server_uri": "ldap://fake",
         "base_dn": "DC=corp,DC=local",
+        "domain": company.domain,
         "search_ous": [],
         "min_entries_for_deactivation": 1,
     }

@@ -44,7 +44,8 @@ class LdapServerAdmin(CeleryTriggerMixin, BaseModelAdmin):
         }),
         ("Безопасность", {
             "fields": ("use_ssl", "start_tls", "tls_validate", "ca_certs_file",
-                       "authentication", "bind_dn", "bind_password", "bind_password_env"),
+                       "authentication", "domain", "bind_dn", "bind_password",
+                       "bind_password_env"),
         }),
         ("Поиск", {
             "fields": ("base_dn", "search_ous", "user_filter", "include_disabled", "page_size"),

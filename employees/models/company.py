@@ -10,6 +10,15 @@ class Company(BaseModel):
     description = models.TextField("Описание", blank=True)
     is_default = models.BooleanField("По умолчанию", default=False)
 
+    org_id = models.CharField("org_id старой системы", max_length=128, blank=True, db_index=True)
+    domain = models.CharField("Домен AD", max_length=128, blank=True)
+    country_id = models.CharField("Код страны", max_length=8, blank=True, default="ru")
+    country_name = models.CharField("Страна", max_length=128, blank=True, default="Россия")
+    integrations = models.JSONField(
+        "Интеграции 1С", default=dict, blank=True,
+        help_text="URL и логины сервисов 1С ЗУП/ДО. Пароли берутся из переменных окружения.",
+    )
+
     class Meta:
         verbose_name = "Организация"
         verbose_name_plural = "Организации"

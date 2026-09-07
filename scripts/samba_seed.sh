@@ -64,8 +64,8 @@ for login in $STAFF; do
     dn="$(user_dn "$login")"
     [ -z "$dn" ] && continue
     counter=$((counter + 1))
-    if printf 'dn: %s\nchangetype: modify\nreplace: manager\nmanager: %s\n-\nreplace: mobile\nmobile: +7 916 000-00-0%s\n-\nreplace: ipPhone\nipPhone: 10%s\n' \
-        "$dn" "$BOSS_DN" "$counter" "$counter" | ldbmodify -H "$SAM_LDB" >/dev/null 2>&1; then
+    if printf 'dn: %s\nchangetype: modify\nreplace: manager\nmanager: %s\n-\nreplace: mobile\nmobile: +7 916 000-00-0%s\n-\nreplace: ipPhone\nipPhone: 10%s\n-\nreplace: homePhone\nhomePhone: +7 916 100-20-3%s\n' \
+        "$dn" "$BOSS_DN" "$counter" "$counter" "$counter" | ldbmodify -H "$SAM_LDB" >/dev/null 2>&1; then
         echo "  атрибуты обновлены: $login"
     else
         echo "  не удалось обновить атрибуты: $login"
