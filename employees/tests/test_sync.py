@@ -3,8 +3,9 @@ from unittest import mock
 from django.test import TestCase, override_settings
 
 from employees.models import Employee, SyncRun
-from employees.services import LdapSyncService
+from employees.services import LdapSyncService, PhotoService
 from employees.tests.factories import FakeClient, ad_entry, make_company, make_server
+from employees.tests.test_photos import PHOTO_STORAGE, jpeg
 
 LDAP_SETTINGS = {
     "PROFILE": "ad",
@@ -40,6 +41,20 @@ class SyncServiceTests(TestCase):
         self.assertEqual((run.created, run.updated), (0, 1))
         self.assertEqual(Employee.objects.count(), 1)
         self.assertEqual(Employee.objects.get().title, "Ведущий инженер")
+
+    @override_settings(LDAP=LDAP_SETTINGS, STORAGES=PHOTO_STORAGE)
+    def test_photo_from_ad_goes_to_disk(self):
+        self.run_sync_with([ad_entry(thumbnailPhoto=jpeg())])
+        employee = Employee.objects.get()
+        self.assertEqual(employee.photo_dir, f"{self.company.code}/zup-0001")
+        self.assertTrue(PhotoService().storage.exists(f"{employee.photo_dir}/original.jpg"))
+
+    @override_settings(LDAP=LDAP_SETTINGS, STORAGES=PHOTO_STORAGE)
+    def test_unchanged_photo_does_not_mark_record_as_updated(self):
+        photo = jpeg()
+        self.run_sync_with([ad_entry(thumbnailPhoto=photo)])
+        run = self.run_sync_with([ad_entry(thumbnailPhoto=photo)])
+        self.assertEqual((run.updated, run.unchanged), (0, 1))
 
     def test_employee_is_linked_to_company_and_server(self):
         self.run_sync_with([ad_entry()])

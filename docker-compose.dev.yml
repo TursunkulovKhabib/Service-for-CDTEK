@@ -1,0 +1,42 @@
+services:
+  samba-ad:
+    image: diegogslomp/samba-ad-dc:latest
+    container_name: contacts-samba-ad
+    hostname: dc1
+    privileged: true
+    environment:
+      REALM: CORP.LOCAL
+      DOMAIN: CORP
+      ADMIN_PASS: ${SAMBA_ADMIN_PASS:-Passw0rd!2026}
+      DNS_FORWARDER: 8.8.8.8
+      BIND_NETWORK_INTERFACES: "false"
+    ports:
+      - "127.0.0.1:1389:389"
+      - "127.0.0.1:1636:636"
+    volumes:
+      - contacts-samba-private:/usr/local/samba/private
+      - contacts-samba-etc:/usr/local/samba/etc
+
+  samba-ad-branch:
+    image: diegogslomp/samba-ad-dc:latest
+    container_name: contacts-samba-ad-branch
+    hostname: dc2
+    privileged: true
+    environment:
+      REALM: BRANCH.LOCAL
+      DOMAIN: BRANCH
+      ADMIN_PASS: ${SAMBA_ADMIN_PASS:-Passw0rd!2026}
+      DNS_FORWARDER: 8.8.8.8
+      BIND_NETWORK_INTERFACES: "false"
+    ports:
+      - "127.0.0.1:2389:389"
+      - "127.0.0.1:2636:636"
+    volumes:
+      - contacts-samba2-private:/usr/local/samba/private
+      - contacts-samba2-etc:/usr/local/samba/etc
+
+volumes:
+  contacts-samba-private:
+  contacts-samba-etc:
+  contacts-samba2-private:
+  contacts-samba2-etc:

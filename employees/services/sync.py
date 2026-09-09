@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from employees.models import Employee, SyncRun
 from employees.repositories import EmployeeRepository, LdapServerRepository, SyncRunRepository
+from employees.services.photos import PhotoService
 from ldapsync.client import LdapClient, LdapSyncError
 from ldapsync.config import load_settings
 from ldapsync.mapping import build_payload, to_generalized_time
@@ -20,16 +21,17 @@ SYNCED_FIELDS = (
     "birthday", "email", "phone_mobile", "phone_mobile_work", "phone_internal",
     "search_phone", "region", "office", "department", "department_code",
     "title", "project_name", "company_name", "description", "manager_dn",
-    "personal_data_consent", "photo", "zup_uid", "ad_enabled",
+    "personal_data_consent", "zup_uid", "ad_enabled",
     "account_control", "when_created", "when_changed", "usn_changed",
 )
 
 
 class LdapSyncService:
-    def __init__(self, employees=None, servers=None, runs=None):
+    def __init__(self, employees=None, servers=None, runs=None, photos=None):
         self.employees = employees or EmployeeRepository()
         self.servers = servers or LdapServerRepository()
         self.runs = runs or SyncRunRepository()
+        self.photos = photos or PhotoService()
 
     def sync_all(self, mode: str = SyncRun.Mode.FULL, trigger: str = SyncRun.Trigger.CLI,
                  progress: Optional[Callable[[str], None]] = None) -> list:
@@ -161,6 +163,9 @@ class LdapSyncService:
             if ldap_server is not None and employee.ldap_server_id != ldap_server.id:
                 employee.ldap_server = ldap_server
                 changed.append("ldap_server")
+
+            if "photo" not in locked and self.photos.store(employee, payload.get("photo")):
+                changed.extend(["photo_dir", "photo_hash", "photo_updated_at"])
 
             desired_active = bool(payload.get("ad_enabled", True))
             if employee.is_active != desired_active:

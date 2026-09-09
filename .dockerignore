@@ -9,3 +9,4 @@ staticfiles/
 docker/
 scripts/
 *.md
+media/

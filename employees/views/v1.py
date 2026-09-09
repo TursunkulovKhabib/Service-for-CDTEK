@@ -1,4 +1,3 @@
-import hmac
 import math
 
 from django.conf import settings
@@ -8,7 +7,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from employees.dto import LegacyEmployeeDTO, LegacyRefDataDTO, LegacyResponse
-from employees.services import EmployeeService
+from employees.services import ApiClientService, EmployeeService
 
 
 class Params:
@@ -66,7 +65,7 @@ def paginate(queryset, limit: int, page: int):
 class LegacyApiView(APIView):
     """Контроллер старого API. Действия разложены в словарь, а не в switch."""
 
-    # Клиенты старого API - это не пользователи системы, а список из настроек,
+    # Клиенты старого API - это не пользователи системы, а записи из админки,
     # поэтому заголовок разбираем сами и не отдаём его аутентификации DRF.
     authentication_classes = []
     permission_classes = [AllowAny]
@@ -75,6 +74,7 @@ class LegacyApiView(APIView):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.service = EmployeeService()
+        self.clients = ApiClientService()
         self.dto = LegacyEmployeeDTO()
 
     @property
@@ -118,27 +118,9 @@ class LegacyApiView(APIView):
     def authorize(self, request, act: str) -> None:
         if not getattr(settings, "LEGACY_V1_REQUIRE_BASIC_AUTH", True):
             return
-        clients = getattr(settings, "LEGACY_V1_CLIENTS", {})
-        login, password = self.decode_basic(request.META.get("HTTP_AUTHORIZATION", ""))
-        client = clients.get(login)
-        if client is None or not hmac.compare_digest(password, client["password"]):
-            raise LegacyError("Unauthorized")
-
-        if act and act not in client["permissions"]:
-            raise LegacyError("Forbidden")
-
-    @staticmethod
-    def decode_basic(header: str) -> tuple:
-        import base64
-
-        if not header.lower().startswith("basic "):
-            return "", ""
-        try:
-            decoded = base64.b64decode(header.split(" ", 1)[1]).decode("utf-8")
-        except Exception:
-            return "", ""
-        login, _, password = decoded.partition(":")
-        return login, password
+        client, error = self.clients.authorize(request.META.get("HTTP_AUTHORIZATION", ""), act)
+        if client is None:
+            raise LegacyError(error)
 
     # ------------------------------------------------------------------ 1
     def get_user_list(self, params: Params) -> dict:

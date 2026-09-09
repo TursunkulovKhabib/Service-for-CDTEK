@@ -27,6 +27,7 @@ class EmployeeAdmin(CeleryTriggerMixin, BaseModelAdmin):
         "object_guid", "userid", "sam_account_name", "user_principal_name",
         "distinguished_name", "ldap_server", "ad_enabled", "account_control",
         "when_created", "when_changed", "usn_changed", "first_seen_at", "last_synced_at",
+        "photo_col", "photo_dir", "photo_hash", "photo_updated_at",
     )
     fieldsets = (
         ("Сотрудник", {
@@ -39,6 +40,9 @@ class EmployeeAdmin(CeleryTriggerMixin, BaseModelAdmin):
         ("Оргструктура", {
             "fields": ("company", "company_name", "department", "department_code",
                        "region", "office", "project_name", "manager", "manager_dn"),
+        }),
+        ("Фотография", {
+            "fields": ("photo_col", "photo_dir", "photo_hash", "photo_updated_at"),
         }),
         ("Публикация", {
             "fields": ("is_active", "is_hidden", "personal_data_consent",
@@ -65,6 +69,17 @@ class EmployeeAdmin(CeleryTriggerMixin, BaseModelAdmin):
     @display(description="Контакты")
     def contacts_col(self, obj):
         return format_html("{}<br><span style='opacity:.7'>{}</span>", obj.email or "—", obj.any_phone or "—")
+
+    @display(description="Фото")
+    def photo_col(self, obj):
+        if not obj.has_photo:
+            return "Фотографии нет."
+        card = obj.photos().base64(obj, "card")
+        if not card:
+            return "Файл не найден в хранилище."
+        return format_html(
+            "<img src='data:image/jpeg;base64,{}' style='max-height:220px;border-radius:6px'>", card
+        )
 
     @display(
         description="Статус",

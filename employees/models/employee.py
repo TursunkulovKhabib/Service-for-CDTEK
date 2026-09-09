@@ -70,7 +70,12 @@ class Employee(BaseModel):
         on_delete=models.SET_NULL, related_name="subordinates",
     )
 
-    photo = models.BinaryField("Фото (thumbnailPhoto)", null=True, blank=True, editable=False)
+    photo_dir = models.CharField(
+        "Папка с фото", max_length=255, blank=True,
+        help_text="Организация и UID из 1С внутри хранилища фотографий.",
+    )
+    photo_hash = models.CharField("Отпечаток фото", max_length=64, blank=True)
+    photo_updated_at = models.DateTimeField("Фото обновлено", null=True, blank=True)
 
     is_hidden = models.BooleanField("Скрыт из API", default=False)
     ad_enabled = models.BooleanField("Учётка включена в AD", default=True)
@@ -122,12 +127,26 @@ class Employee(BaseModel):
         return 1 if self.is_active else 0
 
     @property
-    def photo_base64(self) -> str:
-        import base64
+    def birthday_str(self) -> str:
+        """День и месяц без года: год рождения наружу не отдаём."""
+        return self.birthday.strftime("%d.%m") if self.birthday else ""
 
-        if not self.photo:
-            return ""
-        return base64.b64encode(bytes(self.photo)).decode("ascii")
+    @property
+    def has_photo(self) -> bool:
+        return bool(self.photo_hash)
+
+    def photos(self):
+        from employees.services import PhotoService
+
+        return PhotoService()
+
+    @property
+    def photo_base64(self) -> str:
+        return self.photos().base64(self, "thumb")
+
+    @property
+    def photo_big_base64(self) -> str:
+        return self.photos().base64(self, "card")
 
     @property
     def org_id(self) -> str:

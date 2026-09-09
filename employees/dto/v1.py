@@ -16,8 +16,6 @@ class LegacyEmployeeDTO:
         if source == "updated":
             value = employee.when_changed or employee.updated_at
             return value.strftime(self.date_format) if value else ""
-        if source == "birthday_str":
-            return employee.birthday.strftime("%d.%m") if employee.birthday else ""
         if source == "zup_state_dateto":
             value = employee.zup_state_dateto
             return value.strftime(self.date_format) if value else ""

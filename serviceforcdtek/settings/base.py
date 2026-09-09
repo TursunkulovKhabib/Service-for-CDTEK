@@ -4,6 +4,7 @@ from .companies import *  # noqa: F401,F403
 from .env import BASE_DIR, env, env_bool, env_int, env_list
 from .ldap import *  # noqa: F401,F403
 from .legacy import *  # noqa: F401,F403
+from .photos import *  # noqa: F401,F403
 
 SECRET_KEY = env("DJANGO_SECRET_KEY", "django-insecure-dev-only-change-me")
 DEBUG = env_bool("DJANGO_DEBUG", False)
@@ -30,6 +31,7 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -95,6 +97,15 @@ CELERY_TIMEZONE = TIME_ZONE
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
+    "photos": {
+        "BACKEND": env("PHOTO_STORAGE_BACKEND", "django.core.files.storage.FileSystemStorage"),
+        "OPTIONS": {"location": str(PHOTO_ROOT), "base_url": PHOTO_URL},
+    },
+}
 
 UNFOLD = {
     "SITE_TITLE": "Контакты - справочник сотрудников",

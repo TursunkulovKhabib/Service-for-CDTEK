@@ -1,3 +1,5 @@
+from django.conf import settings
+from django.http import Http404, HttpResponse
 from django_filters import rest_framework as df
 from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
@@ -8,7 +10,7 @@ from employees.dto import CompanyDTO, EmployeeDetailDTO, EmployeeListDTO, SyncRu
 from employees.models import Employee
 from employees.permissions import JwtRequiredPermission
 from employees.repositories import CompanyRepository, SyncRunRepository
-from employees.services import EmployeeService
+from employees.services import EmployeeService, PhotoService
 
 
 class EmployeeFilter(df.FilterSet):
@@ -52,6 +54,17 @@ class EmployeeViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, BaseApiV
     @action(detail=False, url_path="departments")
     def departments(self, request):
         return Response(self.service.departments(company=request.query_params.get("company", "")))
+
+    @action(detail=True, url_path="photo")
+    def photo(self, request, object_guid=None):
+        """Отдаёт файл фотографии: size=thumb, card или original."""
+        size = request.query_params.get("size", "thumb")
+        if size not in settings.PHOTO_SIZES:
+            return Response({"detail": "Неизвестный формат фото."}, status=400)
+        raw = PhotoService().read(self.get_object(), size)
+        if not raw:
+            raise Http404("Фотографии нет.")
+        return HttpResponse(raw, content_type="image/jpeg")
 
 
 class CompanyViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, BaseApiV2ViewSet):

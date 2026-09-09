@@ -33,11 +33,26 @@ LEGACY_V1 = {
         "vocation_days": "vacation_days",
     },
     "CONSENT_FIELD": {"personal_data_consent": "personal_data_consent"},
-    "BIG_PHOTO_FIELD": {"photo_big": "photo_base64"},
+    "BIG_PHOTO_FIELD": {"photo_big": "photo_big_base64"},
     "DATE_FORMAT": "%d.%m.%Y",
     "DEFAULT_LIMIT": 20,
     "DEFAULT_MIN_DIGIT": 3,
     "NULL_TO_EMPTY": True,
+}
+
+LEGACY_V1_ACTIONS = (
+    ("getuserlist", "1 - getuserlist: сотрудники, изменённые с даты"),
+    ("getboss", "2 - getboss: руководитель по UID 1С"),
+    ("getdepartments", "3 - getdepartments: подразделения"),
+    ("searchuserlist", "4 - searchuserlist: поиск по строке"),
+    ("getuserlistbyemailarray", "5 - getuserlistbyemailarray: выборка по списку почт"),
+    ("searchuserlistrank", "6 - searchuserlistrank: поиск с ранжированием"),
+    ("getcountries", "7 - getcountries: страны"),
+    ("getorganizations", "8 - getorganizations: организации"),
+)
+
+LEGACY_V1_ACTION_ALIASES = {
+    str(number): name for number, (name, _) in enumerate(LEGACY_V1_ACTIONS, start=1)
 }
 
 LEGACY_V1_REQUIRE_BASIC_AUTH = env_bool("LEGACY_V1_REQUIRE_BASIC_AUTH", True)

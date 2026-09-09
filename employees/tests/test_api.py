@@ -9,7 +9,8 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from employees.models import Employee
+from employees.models import ApiClient, Employee
+from employees.services import ApiClientService
 from employees.tests.factories import make_company
 
 CYRILLIC_SEARCH = unittest.skipIf(
@@ -218,6 +219,69 @@ class LegacyAccessControlTests(ApiFixtureMixin, TestCase):
         self.assertEqual(payload["code"], "ok")
 
 
+@override_settings(LEGACY_V1_REQUIRE_BASIC_AUTH=True, LEGACY_V1_CLIENTS=CLIENTS)
+class ApiClientFromAdminTests(ApiFixtureMixin, TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.create_fixtures()
+        cls.bot = ApiClient.objects.create(
+            login="contacts-bot", description="Бот Контакты",
+            permissions=["getuserlist", "getcountries"],
+        )
+        cls.bot.set_password("bot-secret", save=True)
+
+    def call(self, act: str, login: str, password: str, **query):
+        return self.client.get(
+            reverse("v1:userservice"), {"act": act, **query}, headers=basic(login, password),
+        ).json()
+
+    def test_password_is_stored_only_as_hash(self):
+        self.bot.refresh_from_db()
+        self.assertNotIn("bot-secret", self.bot.password_hash)
+        self.assertTrue(self.bot.check_password("bot-secret"))
+
+    def test_client_from_database_passes(self):
+        payload = self.call("getuserlist", "contacts-bot", "bot-secret", dtfrom="01.01.2020")
+        self.assertEqual(payload["code"], "ok")
+
+    def test_numeric_alias_uses_the_same_permission(self):
+        payload = self.call("1", "contacts-bot", "bot-secret", dtfrom="01.01.2020")
+        self.assertEqual(payload["code"], "ok")
+
+    def test_method_outside_the_list_is_forbidden(self):
+        self.assertEqual(
+            self.call("getorganizations", "contacts-bot", "bot-secret")["message"], "Forbidden"
+        )
+
+    def test_wrong_password_is_rejected(self):
+        self.assertEqual(
+            self.call("getuserlist", "contacts-bot", "wrong")["message"], "Unauthorized"
+        )
+
+    def test_deactivated_client_loses_access(self):
+        self.bot.deactivate()
+        self.assertEqual(
+            self.call("getuserlist", "contacts-bot", "bot-secret")["message"], "Unauthorized"
+        )
+        self.bot.activate()
+
+    def test_clients_from_env_still_work(self):
+        payload = self.call("getuserlist", "mailer2021", "mail-secret", dtfrom="01.01.2020")
+        self.assertEqual(payload["code"], "ok")
+
+    def test_import_moves_env_clients_into_database(self):
+        stats = ApiClientService().import_from_settings()
+        self.assertEqual(stats["created"], 2)
+        imported = ApiClient.objects.get(login="mailer2021")
+        self.assertTrue(imported.check_password("mail-secret"))
+        self.assertEqual(imported.permissions, ["getuserlist"])
+
+    def test_last_used_is_written_after_call(self):
+        self.call("getcountries", "contacts-bot", "bot-secret")
+        self.bot.refresh_from_db()
+        self.assertIsNotNone(self.bot.last_used_at)
+
+
 @override_settings(API_V2_REQUIRE_JWT=False)
 class ApiV2Tests(ApiFixtureMixin, TestCase):
     @classmethod
@@ -243,6 +307,12 @@ class ApiV2Tests(ApiFixtureMixin, TestCase):
         payload = self.client.get(url).json()
         self.assertEqual(payload["email"], "ivanov@cdtek.ru")
         self.assertEqual(payload["phone_internal"], "1234")
+
+    def test_detail_hides_birth_year(self):
+        url = reverse("v2:employee-detail", args=[str(self.ivanov.object_guid)])
+        payload = self.client.get(url).json()
+        self.assertEqual(payload["birthday"], "17.05")
+        self.assertNotIn("1990", str(payload))
 
     def test_companies_endpoint(self):
         codes = {row["code"] for row in self.client.get(reverse("v2:company-list")).json()["results"]}
